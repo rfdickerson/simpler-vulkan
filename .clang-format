@@ -1,0 +1,25 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+BreakBeforeBraces: Attach         # K&R: same-line braces
+AllowShortFunctionsOnASingleLine: Empty
+NamespaceIndentation: All
+IndentCaseLabels: true
+SpaceBeforeParens: ControlStatements
+PointerAlignment: Left
+IncludeBlocks: Regroup
+SortIncludes: true
+IncludeIsMainRegex: '(_test)?$'
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+BinPackArguments: false
+BinPackParameters: false
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveBitFields: Consecutive
+Cpp11BracedListStyle: true
+SpacesInAngles: false
+EmptyLineAfterAccessModifier: Never
+ReflowComments: true
+KeepEmptyLinesAtTheStartOfBlocks: false

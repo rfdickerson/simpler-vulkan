@@ -1,0 +1,51 @@
+# Apply to headers in include/ and sources in src/
+HeaderFilterRegex: '^(include|src)/'
+# Keep warnings (not errors) so you can iterate
+WarningsAsErrors: ''
+
+Checks: >
+  bugprone-*,
+  clang-analyzer-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  cppcoreguidelines-avoid-non-const-global-variables,
+  cppcoreguidelines-interfaces-global-init,
+
+  # Turn OFF noisy checks that fight low-level Vulkan/C-style code
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-avoid-c-arrays,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-no-malloc,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -hicpp-avoid-goto,
+  -hicpp-exception-baseclass,
+  -hicpp-no-array-decay,
+  -readability-magic-numbers,
+  -modernize-use-trailing-return-type,
+  -performance-noexcept-move-constructor,
+  -modernize-avoid-c-arrays
+
+CheckOptions:
+  # --- Identifier naming (MochiEngine style) ---
+  - { key: readability-identifier-naming.NamespaceCase,        value: lower_case }
+  - { key: readability-identifier-naming.TypeCase,             value: CamelCase }   # PascalCase
+  - { key: readability-identifier-naming.EnumCase,             value: CamelCase }
+  - { key: readability-identifier-naming.EnumConstantCase,     value: CamelCase }
+  - { key: readability-identifier-naming.FunctionCase,         value: lower_case }  # lower_snake_case allowed
+  - { key: readability-identifier-naming.VariableCase,         value: lower_case }
+  - { key: readability-identifier-naming.GlobalConstantCase,   value: UPPER_CASE }
+  - { key: readability-identifier-naming.MacroDefinitionCase,  value: UPPER_CASE }
+  # Don’t force member prefixes/suffixes
+  - { key: readability-identifier-naming.PrivateMemberSuffix,  value: '' }
+  - { key: readability-identifier-naming.MemberCase,           value: lower_case }
+
+  # --- modernize-use-nullptr: allow Vulkan’s sentinel macro ---
+  - { key: modernize-use-nullptr.NullMacroWhitelist, value: 'VK_NULL_HANDLE' }
+
+  # --- modernize-loop-convert: only suggest when safe ---
+  - { key: modernize-loop-convert.MaxCopySize, value: '16' }
+
+  # --- readability-else-after-return is good hygiene ---
+  # (no extra options needed; included via readability-*)
