@@ -1,11 +1,14 @@
 #include "device.hpp"
 
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
 #include <iostream>
 #include <stdexcept>
 #include <vector>
 
 void initVulkan(Device& device) {
-    // Initialize Vulkan instance
+    // Initialize Vulkan instance with required extensions
     VkApplicationInfo appInfo{};
     appInfo.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.pApplicationName   = "Hello Vulkan";
@@ -13,9 +16,17 @@ void initVulkan(Device& device) {
     appInfo.pEngineName        = "No Engine";
     appInfo.engineVersion      = VK_MAKE_VERSION(1, 0, 0);
     appInfo.apiVersion         = VK_API_VERSION_1_4;
+    
+    // Get required extensions from GLFW
+    uint32_t glfwExtensionCount = 0;
+    const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+    
     VkInstanceCreateInfo createInfo{};
     createInfo.sType            = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
+    createInfo.enabledExtensionCount = glfwExtensionCount;
+    createInfo.ppEnabledExtensionNames = glfwExtensions;
+    
     if (vkCreateInstance(&createInfo, nullptr, &device.instance) != VK_SUCCESS) {
         throw std::runtime_error("failed to create instance!");
     }
@@ -103,13 +114,18 @@ void initDevice(Device& device) {
     vulkan12Features.bufferDeviceAddress = VK_TRUE;
     vulkan12Features.pNext               = &vulkan13Features;
 
+    // Device extensions for swapchain
+    const std::vector<const char*> deviceExtensions = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
+    
     createInfo.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.pNext                   = &vulkan12Features;
     createInfo.pEnabledFeatures        = &deviceFeatures;
     createInfo.pQueueCreateInfos       = &queueCreateInfo;
     createInfo.queueCreateInfoCount    = 1;
-    createInfo.enabledExtensionCount   = 0;
-    createInfo.ppEnabledExtensionNames = nullptr;
+    createInfo.enabledExtensionCount   = static_cast<uint32_t>(deviceExtensions.size());
+    createInfo.ppEnabledExtensionNames = deviceExtensions.data();
     createInfo.enabledLayerCount       = 0;
     createInfo.ppEnabledLayerNames     = nullptr;
 
