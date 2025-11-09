@@ -8,4 +8,9 @@ struct Window {
     int         height;
 
     void InitGLFW();
+    void CreateWindow(int width, int height, const char* title);
+    void        onResize(int width, int height);
+    static void pollEvents();
+    bool        shouldClose() const;
+    void        cleanup() const;
 };
