@@ -72,13 +72,13 @@ inline int hexDistance(const HexCoord& a, const HexCoord& b) {
 inline glm::vec3 hexToWorld(const HexCoord& hex, float hexSize) {
     float x = hexSize * (3.0f/2.0f * hex.q);
     float z = hexSize * (std::sqrt(3.0f)/2.0f * hex.q + std::sqrt(3.0f) * hex.r);
-    return glm::vec3(x, 0.0f, z);
+    return glm::vec3(x, 0.0f, -z);  // Negate Z to fix upside-down view
 }
 
 // Convert world position to hex coordinates (returns fractional, needs rounding)
 inline HexCoord worldToHex(const glm::vec3& worldPos, float hexSize) {
     float q = (2.0f/3.0f * worldPos.x) / hexSize;
-    float r = (-1.0f/3.0f * worldPos.x + std::sqrt(3.0f)/3.0f * worldPos.z) / hexSize;
+    float r = (-1.0f/3.0f * worldPos.x - std::sqrt(3.0f)/3.0f * worldPos.z) / hexSize;  // Negate z term to match negated Z in hexToWorld
     
     // Cube rounding
     float s = -q - r;
@@ -106,7 +106,7 @@ inline std::array<glm::vec3, 6> hexVertices(const HexCoord& hex, float hexSize, 
     
     std::array<glm::vec3, 6> vertices;
     for (int i = 0; i < 6; ++i) {
-        float angle_deg = 60.0f * i;
+        float angle_deg = 60.0f * i;  // Start at 0° for flat-top
         float angle_rad = glm::radians(angle_deg);
         vertices[i] = center + glm::vec3(
             hexSize * std::cos(angle_rad),

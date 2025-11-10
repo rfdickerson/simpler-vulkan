@@ -5,6 +5,7 @@ layout(location = 0) in vec3 fragWorldPos;
 layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragUV;
 layout(location = 3) in vec2 fragHexCoord;
+layout(location = 4) flat in uint fragTerrainType;
 
 // Push constants
 layout(push_constant) uniform PushConstants {
@@ -48,22 +49,91 @@ float noise(vec2 p) {
     return mix(a, b, u.x) + (c - a)* u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
-// Procedural terrain color based on hex coordinates
-vec3 getTerrainColor(vec2 hexCoord) {
-    // Use hex coordinates to generate varied terrain
-    float n = noise(hexCoord * 0.5);
+// Axial (q, r) -> world XZ center for flat-top hex layout
+vec2 axialToWorldXZFlatTop(vec2 qr, float size) {
+	// Matches src/hex_coord.hpp::hexToWorld (note the negated Z)
+	float q = qr.x;
+	float r = qr.y;
+	float x = size * (1.5 * q);
+	float zRaw = size * (sqrt(3.0) * 0.5 * q + sqrt(3.0) * r);
+	return vec2(x, -zRaw);
+}
+
+// Signed distance to a flat-top regular hex with circumradius r, centered at origin
+// Adapted from well-known SDF formulations (Inigo Quilez)
+float sdHexFlatTop(vec2 p, float r) {
+	// Project into first sextant
+	p = abs(p);
+	// Distance to vertical and slanted edges
+	float d1 = p.y;
+	float d2 = p.x * 0.57735026919 + p.y * 0.5; // tan(30) = 1/sqrt(3), cos(60)=0.5
+	float h = max(d1, d2) - r * 0.5; // scale to match circumradius
+	// The coefficient 0.5 aligns the edge at radius r in this formulation
+	return h;
+}
+
+// Get terrain color based on terrain type
+vec3 getTerrainColor(uint terrainType, vec2 hexCoord) {
+    // Terrain type colors (matching TerrainProperties in terrain.hpp)
+    vec3 baseColor;
     
-    // Base colors for different terrain types (simplified for now)
-    vec3 grassColor = vec3(0.4, 0.6, 0.2);
-    vec3 dirtColor = vec3(0.5, 0.4, 0.3);
-    vec3 stoneColor = vec3(0.6, 0.6, 0.6);
+    switch(terrainType) {
+        case 0: // Ocean
+            baseColor = vec3(0.1, 0.3, 0.5);
+            break;
+        case 1: // CoastalWater
+            baseColor = vec3(0.2, 0.5, 0.6);
+            break;
+        case 2: // Grassland
+            baseColor = vec3(0.4, 0.6, 0.2);
+            break;
+        case 3: // Plains
+            baseColor = vec3(0.7, 0.6, 0.3);
+            break;
+        case 4: // Forest
+            baseColor = vec3(0.2, 0.4, 0.1);
+            break;
+        case 5: // Jungle
+            baseColor = vec3(0.15, 0.35, 0.15);
+            break;
+        case 6: // Hills
+            baseColor = vec3(0.5, 0.5, 0.3);
+            break;
+        case 7: // Mountains
+            baseColor = vec3(0.4, 0.4, 0.4);
+            break;
+        case 8: // Desert
+            baseColor = vec3(0.9, 0.8, 0.5);
+            break;
+        case 9: // Dunes
+            baseColor = vec3(0.95, 0.85, 0.6);
+            break;
+        case 10: // Swamp
+            baseColor = vec3(0.3, 0.3, 0.2);
+            break;
+        case 11: // Marsh
+            baseColor = vec3(0.4, 0.4, 0.3);
+            break;
+        case 12: // Tundra
+            baseColor = vec3(0.8, 0.85, 0.9);
+            break;
+        case 13: // Ice
+            baseColor = vec3(0.9, 0.95, 1.0);
+            break;
+        case 14: // River
+            baseColor = vec3(0.3, 0.5, 0.7);
+            break;
+        case 15: // NaturalWonder
+            baseColor = vec3(0.8, 0.6, 1.0);
+            break;
+        default:
+            baseColor = vec3(1.0, 0.0, 1.0); // Magenta for unknown types
+            break;
+    }
     
-    // Mix colors based on noise
-    vec3 baseColor = mix(grassColor, dirtColor, smoothstep(0.3, 0.7, n));
-    
-    // Add some variation
+    // Add subtle procedural variation
     float detail = noise(hexCoord * 2.0);
-    baseColor = mix(baseColor, stoneColor, detail * 0.2);
+    baseColor = mix(baseColor, baseColor * 1.2, detail * 0.15);
     
     return baseColor;
 }
@@ -94,38 +164,43 @@ vec3 calculateLighting(vec3 baseColor, vec3 normal, vec3 worldPos) {
     return (ambient + diffuse + specular) * ao;
 }
 
-// Hex edge detection for border highlights
-float hexEdgeDistance(vec2 uv) {
-    // Distance from center
-    vec2 centered = uv - vec2(0.5);
-    float dist = length(centered);
-    
-    // Edge detection (closer to 0.5 = edge)
-    float edgeDist = abs(dist - 0.45);
-    return smoothstep(0.0, 0.05, edgeDist);
-}
-
 void main() {
-    // Get base terrain color
-    vec3 baseColor = getTerrainColor(fragHexCoord);
+    // Get base terrain color based on terrain type
+    vec3 baseColor = getTerrainColor(fragTerrainType, fragHexCoord);
     
     // Calculate lighting
     vec3 litColor = calculateLighting(baseColor, fragNormal, fragWorldPos);
     
-    // Hex border highlight (subtle edge light)
-    float edgeFactor = hexEdgeDistance(fragUV);
-    vec3 edgeColor = vec3(0.8, 0.7, 0.5); // Warm edge light (parchment-like)
-    litColor = mix(edgeColor * 0.3, litColor, edgeFactor);
+	// Compute precise hex-edge factor using SDF in local hex coordinates
+	vec2 centerXZ = axialToWorldXZFlatTop(fragHexCoord, terrain.hexSize);
+	vec2 local = fragWorldPos.xz - centerXZ;
+	// The mesh uses circumradius = hexSize; SDF expects same scale
+	float d = sdHexFlatTop(local, terrain.hexSize);
+
+	// Outline near the hex edge (anti-aliased)
+	float edgePx = 1.5; // edge thickness in "world" units scaled by derivative
+	// Convert to a smoothing width using screen-space derivatives
+	float dd = abs(d);
+	float aa = fwidth(d) * 1.5;
+	float edgeMask = 1.0 - smoothstep(edgePx - aa, edgePx + aa, dd);
+
+	// Subtle inner darkening near edges for inked-map look
+	float innerShade = 1.0 - smoothstep(0.0, edgePx * 2.5 + aa, dd);
+	vec3 shaded = mix(litColor * 0.92, litColor, innerShade);
+
+	// Warm edge tint mixed in only at the very rim
+	vec3 edgeColor = vec3(0.85, 0.78, 0.65);
+	shaded = mix(shaded, edgeColor, edgeMask * 0.18);
     
     // Era-based color grading (simplified)
     if (terrain.currentEra == 1) { // Enlightenment
-        litColor = mix(litColor, vec3(dot(litColor, vec3(0.299, 0.587, 0.114))), 0.2);
+		shaded = mix(shaded, vec3(dot(shaded, vec3(0.299, 0.587, 0.114))), 0.2);
     } else if (terrain.currentEra == 2) { // Industrial
-        litColor *= vec3(0.8, 0.85, 0.9); // Cool, desaturated
-        litColor = mix(litColor, vec3(dot(litColor, vec3(0.299, 0.587, 0.114))), 0.4);
+		shaded *= vec3(0.8, 0.85, 0.9); // Cool, desaturated
+		shaded = mix(shaded, vec3(dot(shaded, vec3(0.299, 0.587, 0.114))), 0.4);
     }
     
     // Output final color
-    outColor = vec4(litColor, 1.0);
+	outColor = vec4(shaded, 1.0);
 }
 

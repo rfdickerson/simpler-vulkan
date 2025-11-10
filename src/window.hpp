@@ -23,4 +23,5 @@ struct Window {
     
     void onMouseButton(int button, int action, int mods);
     void onMouseMove(double xpos, double ypos);
+	bool consumeCameraPanDelta(float& outDx, float& outDy);
 };

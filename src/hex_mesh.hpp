@@ -12,19 +12,22 @@ struct TerrainVertex {
     glm::vec3 normal;      // Normal (for lighting)
     glm::vec2 uv;          // UV coordinates (for texturing)
     glm::vec2 hexCoord;    // Hex coordinates (q, r) for procedural effects
+    uint32_t terrainType;  // Terrain type ID
     
     TerrainVertex()
         : position(0.0f)
         , normal(0.0f, 1.0f, 0.0f)
         , uv(0.0f)
         , hexCoord(0.0f)
+        , terrainType(0)
     {}
     
-    TerrainVertex(glm::vec3 pos, glm::vec3 norm, glm::vec2 uv_, glm::vec2 hexC)
+    TerrainVertex(glm::vec3 pos, glm::vec3 norm, glm::vec2 uv_, glm::vec2 hexC, uint32_t type = 0)
         : position(pos)
         , normal(norm)
         , uv(uv_)
         , hexCoord(hexC)
+        , terrainType(type)
     {}
 };
 
@@ -35,7 +38,7 @@ public:
     std::vector<uint32_t> indices;
     
     // Generate a single hex tile mesh (6 triangles forming a hexagon)
-    static HexMesh generateSingleHex(const HexCoord& hex, float hexSize, float height = 0.0f) {
+    static HexMesh generateSingleHex(const HexCoord& hex, float hexSize, float height = 0.0f, uint32_t terrainType = 0) {
         HexMesh mesh;
         
         glm::vec3 center = hexToWorld(hex, hexSize);
@@ -46,12 +49,13 @@ public:
             center,
             glm::vec3(0.0f, 1.0f, 0.0f),
             glm::vec2(0.5f, 0.5f),
-            glm::vec2(hex.q, hex.r)
+            glm::vec2(hex.q, hex.r),
+            terrainType
         ));
         
-        // 6 outer vertices
+        // 6 outer vertices (flat-top orientation: vertices at right, top-right, top-left, left, bottom-left, bottom-right)
         for (int i = 0; i < 6; ++i) {
-            float angle_deg = 60.0f * i;
+            float angle_deg = 60.0f * i;  // Start at 0° (right) for flat-top
             float angle_rad = glm::radians(angle_deg);
             
             glm::vec3 pos = center + glm::vec3(
@@ -69,7 +73,8 @@ public:
                 pos,
                 glm::vec3(0.0f, 1.0f, 0.0f),
                 glm::vec2(u, v),
-                glm::vec2(hex.q, hex.r)
+                glm::vec2(hex.q, hex.r),
+                terrainType
             ));
         }
         
@@ -85,12 +90,14 @@ public:
     
     // Generate mesh for multiple hexes
     static HexMesh generateHexGrid(const std::vector<HexCoord>& hexes, float hexSize, 
-                                   const std::function<float(const HexCoord&)>& heightFunc = nullptr) {
+                                   const std::function<float(const HexCoord&)>& heightFunc = nullptr,
+                                   const std::function<uint32_t(const HexCoord&)>& typeFunc = nullptr) {
         HexMesh mesh;
         
         for (const auto& hex : hexes) {
             float height = heightFunc ? heightFunc(hex) : 0.0f;
-            HexMesh singleHex = generateSingleHex(hex, hexSize, height);
+            uint32_t terrainType = typeFunc ? typeFunc(hex) : 0;
+            HexMesh singleHex = generateSingleHex(hex, hexSize, height, terrainType);
             
             // Offset indices for the new hex
             uint32_t vertexOffset = static_cast<uint32_t>(mesh.vertices.size());
@@ -194,8 +201,8 @@ public:
     }
     
     // Get vertex attribute descriptions for Vulkan
-    static std::array<VkVertexInputAttributeDescription, 4> getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 4> attributeDescriptions{};
+    static std::array<VkVertexInputAttributeDescription, 5> getAttributeDescriptions() {
+        std::array<VkVertexInputAttributeDescription, 5> attributeDescriptions{};
         
         // Position
         attributeDescriptions[0].binding = 0;
@@ -220,6 +227,12 @@ public:
         attributeDescriptions[3].location = 3;
         attributeDescriptions[3].format = VK_FORMAT_R32G32_SFLOAT;
         attributeDescriptions[3].offset = offsetof(TerrainVertex, hexCoord);
+        
+        // Terrain Type
+        attributeDescriptions[4].binding = 0;
+        attributeDescriptions[4].location = 4;
+        attributeDescriptions[4].format = VK_FORMAT_R32_UINT;
+        attributeDescriptions[4].offset = offsetof(TerrainVertex, terrainType);
         
         return attributeDescriptions;
     }

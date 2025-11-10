@@ -5,6 +5,8 @@ TerrainRenderer::TerrainRenderer(Device& device, float hexSize)
     : device(device)
     , hexSize(hexSize)
     , meshDirty(true)
+    , vertexBuffer{VK_NULL_HANDLE, nullptr}
+    , indexBuffer{VK_NULL_HANDLE, nullptr}
 {
     renderParams.hexSize = hexSize;
 }
@@ -103,6 +105,10 @@ void TerrainRenderer::rebuildMesh() {
         [this](const HexCoord& hex) -> float {
             auto it = tiles.find(hex);
             return (it != tiles.end()) ? it->second.height : 0.0f;
+        },
+        [this](const HexCoord& hex) -> uint32_t {
+            auto it = tiles.find(hex);
+            return (it != tiles.end()) ? static_cast<uint32_t>(it->second.type) : 0;
         });
     
     // Upload to GPU
@@ -129,13 +135,25 @@ void TerrainRenderer::uploadMeshToGPU() {
     
     // Create vertex buffer
     VkDeviceSize vertexBufferSize = sizeof(TerrainVertex) * mesh.vertices.size();
-    vertexBuffer = CreateVertexBuffer(device, vertexBufferSize);
+    
+    VkBufferCreateInfo vertexBufferInfo{};
+    vertexBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    vertexBufferInfo.size = vertexBufferSize;
+    vertexBufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    vertexBufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    
+    VmaAllocationCreateInfo vertexAllocInfo{};
+    vertexAllocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+    vertexAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    
+    VmaAllocationInfo vertexAllocInfoResult;
+    if (vmaCreateBuffer(device.allocator, &vertexBufferInfo, &vertexAllocInfo, &vertexBuffer.buffer, 
+                       &vertexBuffer.allocation, &vertexAllocInfoResult) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create vertex buffer!");
+    }
     
     // Upload vertex data
-    void* data;
-    vmaMapMemory(device.allocator, vertexBuffer.allocation, &data);
-    memcpy(data, mesh.vertices.data(), vertexBufferSize);
-    vmaUnmapMemory(device.allocator, vertexBuffer.allocation);
+    memcpy(vertexAllocInfoResult.pMappedData, mesh.vertices.data(), vertexBufferSize);
     
     // Create index buffer
     VkDeviceSize indexBufferSize = sizeof(uint32_t) * mesh.indices.size();

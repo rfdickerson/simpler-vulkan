@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include <memory>
+#include <chrono>
 
 #include "device.hpp"
 #include "buffer.hpp"
@@ -13,6 +14,8 @@
 #include "glyph_atlas.hpp"
 #include "swapchain.hpp"
 #include "text_pipeline.hpp"
+#include "terrain_example.hpp"
+#include <glm/glm.hpp>
 
 // Colored vertex structure for the triangle
 struct ColoredVertex {
@@ -222,7 +225,7 @@ int main() {
         // Initialize window
         Window window;
         window.InitGLFW();
-        window.CreateWindow(800, 600, "Text Rendering Demo");
+        window.CreateWindow(1280, 720, "Hex Terrain Renderer");
 
         // Initialize Vulkan
         Device device;
@@ -239,140 +242,83 @@ int main() {
         Swapchain swapchain;
         createSwapchain(device, surface, window, swapchain);
 
-        // Setup text rendering (using unique_ptr to control destruction order)
-        std::unique_ptr<GlyphAtlas> atlas = std::make_unique<GlyphAtlas>(device, 2048, 2048);
-        atlas->loadFont("../assets/fonts/EBGaramond-Regular.ttf", 32);
+        // Create terrain example
+        std::unique_ptr<TerrainExample> terrainExample = std::make_unique<TerrainExample>(device, swapchain);
 
-        HbShaper  shaper("../assets/fonts/EBGaramond-Regular.ttf", 32);
-        auto shapedGlyphs = shaper.shape_utf8("Alexandria");
-
-        // Add glyphs to atlas
-        for (const auto& g : shapedGlyphs) {
-            atlas->addGlyph(g.glyph_index);
-        }
-
-        // Create command pool and buffer for atlas upload
+        // Create command pool and buffers
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         poolInfo.queueFamilyIndex = 0;
 
-        VkCommandPool uploadCommandPool;
-        if (vkCreateCommandPool(device.device, &poolInfo, nullptr, &uploadCommandPool) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create upload command pool!");
+        VkCommandPool commandPool;
+        if (vkCreateCommandPool(device.device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create command pool!");
         }
 
-        VkCommandBuffer uploadCmd;
+        std::vector<VkCommandBuffer> commandBuffers(swapchain.MAX_FRAMES_IN_FLIGHT);
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.commandPool = uploadCommandPool;
+        allocInfo.commandPool = commandPool;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = 1;
-        vkAllocateCommandBuffers(device.device, &allocInfo, &uploadCmd);
+        allocInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
+        vkAllocateCommandBuffers(device.device, &allocInfo, commandBuffers.data());
 
-        // Record atlas upload commands
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        vkBeginCommandBuffer(uploadCmd, &beginInfo);
-        
-        Buffer atlasStagingBuffer = atlas->finalizeAtlas(uploadCmd);
-        
-        vkEndCommandBuffer(uploadCmd);
-
-        // Submit and wait for atlas upload
-        VkSubmitInfo submitInfo{};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &uploadCmd;
-
-        vkQueueSubmit(device.queue, 1, &submitInfo, VK_NULL_HANDLE);
-        vkQueueWaitIdle(device.queue);
-
-        // Now it's safe to destroy the staging buffer
-        destroyBuffer(device, atlasStagingBuffer);
-
-        vkDestroyCommandPool(device.device, uploadCommandPool, nullptr);
-
-        // Create triangle pipeline
-        TrianglePipeline trianglePipeline{};
-        createTrianglePipeline(device, swapchain, trianglePipeline);
-
-        // Create colored triangle vertices (positioned beneath the text in NDC)
-        // Base positions that will be offset by camera
-        const std::vector<ColoredVertex> baseTriangleVertices = {
-            {{-0.3f, 0.2f}, {1.0f, 0.0f, 0.0f}},  // Top vertex - Red
-            {{-0.6f, 0.6f}, {0.0f, 1.0f, 0.0f}},  // Bottom left - Green
-            {{ 0.0f, 0.6f}, {0.0f, 0.0f, 1.0f}}   // Bottom right - Blue
-        };
-        std::vector<ColoredVertex> triangleVertices = baseTriangleVertices;
-
-        // Create triangle vertex buffer (we'll update this each frame)
-        VkDeviceSize triangleBufferSize = sizeof(ColoredVertex) * triangleVertices.size();
-        Buffer triangleBuffer = CreateVertexBuffer(device, triangleBufferSize);
-
-        // Create text rendering pipeline
-        TextPipeline textPipeline{};
-        createTextPipeline(device, swapchain, textPipeline);
-        createTextCommandBuffers(device, textPipeline, swapchain.MAX_FRAMES_IN_FLIGHT);
-
-        // Create atlas sampler and update descriptor set
-        VkSampler atlasSampler = createAtlasSampler(device);
-        updateTextDescriptorSet(device, textPipeline, atlas->getAtlasImage().view, atlasSampler);
-
-        // Build initial text vertices
-        std::vector<TextVertex> textVertices = buildTextVertices(shapedGlyphs, *atlas, 50.0f, 300.0f);
-        
-        // Create vertex buffer (we'll update this each frame)
-        VkDeviceSize vertexBufferSize = sizeof(TextVertex) * textVertices.size();
-        Buffer vertexBuffer = CreateVertexBuffer(device, vertexBufferSize);
-
-        std::cout << "Rendering " << textVertices.size() << " text vertices and " 
-                  << triangleVertices.size() << " triangle vertices..." << std::endl;
+        std::cout << "Terrain scene ready to render..." << std::endl;
 
         bool framebufferResized = false;
+        
+        // Time tracking for deltaTime
+        auto lastFrameTime = std::chrono::high_resolution_clock::now();
 
         // Main render loop
         while (!window.shouldClose()) {
             window.pollEvents();
 
+            // Calculate deltaTime
+            auto currentFrameTime = std::chrono::high_resolution_clock::now();
+            float deltaTime = std::chrono::duration<float>(currentFrameTime - lastFrameTime).count();
+            lastFrameTime = currentFrameTime;
+
+			// Apply camera panning from right-mouse drag
+			{
+				float panDX = 0.0f, panDY = 0.0f;
+				if (window.consumeCameraPanDelta(panDX, panDY)) {
+					Camera& cam = terrainExample->getCamera();
+					glm::vec3 viewDir = glm::normalize(cam.target - cam.position);
+					glm::vec2 forwardXZ = glm::normalize(glm::vec2(viewDir.x, viewDir.z));
+					glm::vec2 rightXZ = glm::vec2(forwardXZ.y, -forwardXZ.x);
+
+					float sensitivity = 0.0025f * cam.orbitRadius;
+					float dxWorld = (-panDX) * sensitivity * rightXZ.x + (panDY) * sensitivity * forwardXZ.x;
+					float dzWorld = (-panDX) * sensitivity * rightXZ.y + (panDY) * sensitivity * forwardXZ.y;
+					cam.pan(dxWorld, dzWorld);
+				}
+			}
+
             // Handle window resize
             if (framebufferResized) {
                 recreateSwapchain(device, surface, window, swapchain);
+                terrainExample->getCamera().setAspectRatio(
+                    static_cast<float>(swapchain.extent.width) / 
+                    static_cast<float>(swapchain.extent.height));
                 framebufferResized = false;
             }
 
-            // Update text vertices with camera offset
-            textVertices = buildTextVertices(shapedGlyphs, *atlas, 
-                                            50.0f + window.cameraOffsetX, 
-                                            300.0f + window.cameraOffsetY);
-            void* data;
-            vmaMapMemory(device.allocator, vertexBuffer.allocation, &data);
-            memcpy(data, textVertices.data(), vertexBufferSize);
-            vmaUnmapMemory(device.allocator, vertexBuffer.allocation);
-
-            // Update triangle vertices with camera offset (convert pixel offset to NDC)
-            float ndcOffsetX = (window.cameraOffsetX / static_cast<float>(swapchain.extent.width)) * 2.0f;
-            float ndcOffsetY = (window.cameraOffsetY / static_cast<float>(swapchain.extent.height)) * 2.0f;
-            
-            for (size_t i = 0; i < triangleVertices.size(); ++i) {
-                triangleVertices[i].pos[0] = baseTriangleVertices[i].pos[0] + ndcOffsetX;
-                triangleVertices[i].pos[1] = baseTriangleVertices[i].pos[1] + ndcOffsetY;
-            }
-            
-            void* triangleData;
-            vmaMapMemory(device.allocator, triangleBuffer.allocation, &triangleData);
-            memcpy(triangleData, triangleVertices.data(), triangleBufferSize);
-            vmaUnmapMemory(device.allocator, triangleBuffer.allocation);
+            // Update terrain scene
+            terrainExample->update(deltaTime);
 
             // Acquire next image
             if (!acquireNextImage(device, swapchain)) {
                 recreateSwapchain(device, surface, window, swapchain);
+                terrainExample->getCamera().setAspectRatio(
+                    static_cast<float>(swapchain.extent.width) / 
+                    static_cast<float>(swapchain.extent.height));
                 continue;
             }
 
             // Record command buffer
-            VkCommandBuffer cmd = textPipeline.commandBuffers[swapchain.currentFrame];
+            VkCommandBuffer cmd = commandBuffers[swapchain.currentFrame];
             vkResetCommandBuffer(cmd, 0);
 
             VkCommandBufferBeginInfo cmdBeginInfo{};
@@ -408,7 +354,7 @@ int main() {
             colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
             colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            colorAttachment.clearValue.color = {{0.1f, 0.1f, 0.15f, 1.0f}};
+            colorAttachment.clearValue.color = {{0.05f, 0.05f, 0.08f, 1.0f}};
 
             VkRenderingInfo renderingInfo{};
             renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
@@ -420,62 +366,8 @@ int main() {
 
             vkCmdBeginRendering(cmd, &renderingInfo);
 
-            // Draw triangle first (so it appears beneath text)
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline.pipeline);
-            
-            // Set viewport and scissor for triangle
-            VkViewport viewport{};
-            viewport.x = 0.0f;
-            viewport.y = 0.0f;
-            viewport.width = static_cast<float>(swapchain.extent.width);
-            viewport.height = static_cast<float>(swapchain.extent.height);
-            viewport.minDepth = 0.0f;
-            viewport.maxDepth = 1.0f;
-            vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-            VkRect2D scissor{};
-            scissor.offset = {0, 0};
-            scissor.extent = swapchain.extent;
-            vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-            // Bind triangle vertex buffer
-            VkBuffer triangleBuffers[] = {triangleBuffer.buffer};
-            VkDeviceSize triangleOffsets[] = {0};
-            vkCmdBindVertexBuffers(cmd, 0, 1, triangleBuffers, triangleOffsets);
-
-            // Draw triangle
-            vkCmdDraw(cmd, 3, 1, 0, 0);
-
-            // Now draw text on top
-            // Bind pipeline
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, textPipeline.pipeline);
-
-            // Viewport and scissor already set (no need to set again)
-
-            // Push constants
-            TextPushConstants pushConstants{};
-            pushConstants.screenSize[0] = static_cast<float>(swapchain.extent.width);
-            pushConstants.screenSize[1] = static_cast<float>(swapchain.extent.height);
-            pushConstants.textColor[0] = 1.0f; // R
-            pushConstants.textColor[1] = 1.0f; // G
-            pushConstants.textColor[2] = 1.0f; // B
-            pushConstants.textColor[3] = 1.0f; // A
-            vkCmdPushConstants(cmd, textPipeline.pipelineLayout,
-                             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                             0, sizeof(TextPushConstants), &pushConstants);
-
-            // Bind descriptor set
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                  textPipeline.pipelineLayout, 0, 1,
-                                  &textPipeline.descriptorSet, 0, nullptr);
-
-            // Bind vertex buffer
-            VkBuffer vertexBuffers[] = {vertexBuffer.buffer};
-            VkDeviceSize offsets[] = {0};
-            vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
-
-            // Draw
-            vkCmdDraw(cmd, static_cast<uint32_t>(textVertices.size()), 1, 0, 0);
+            // Render terrain
+            terrainExample->render(cmd);
 
             vkCmdEndRendering(cmd);
 
@@ -491,24 +383,24 @@ int main() {
             vkEndCommandBuffer(cmd);
 
             // Submit command buffer
-            VkSubmitInfo submitInfo2{};
-            submitInfo2.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+            VkSubmitInfo submitInfo{};
+            submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             
             // Wait on imageAvailable (indexed by currentFrame, from acquire)
             VkSemaphore waitSemaphores[] = {swapchain.imageAvailableSemaphores[swapchain.currentFrame]};
             VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-            submitInfo2.waitSemaphoreCount = 1;
-            submitInfo2.pWaitSemaphores = waitSemaphores;
-            submitInfo2.pWaitDstStageMask = waitStages;
-            submitInfo2.commandBufferCount = 1;
-            submitInfo2.pCommandBuffers = &cmd;
+            submitInfo.waitSemaphoreCount = 1;
+            submitInfo.pWaitSemaphores = waitSemaphores;
+            submitInfo.pWaitDstStageMask = waitStages;
+            submitInfo.commandBufferCount = 1;
+            submitInfo.pCommandBuffers = &cmd;
             
             // Signal renderFinished (indexed by currentImageIndex, for present)
             VkSemaphore signalSemaphores[] = {swapchain.renderFinishedSemaphores[swapchain.currentImageIndex]};
-            submitInfo2.signalSemaphoreCount = 1;
-            submitInfo2.pSignalSemaphores = signalSemaphores;
+            submitInfo.signalSemaphoreCount = 1;
+            submitInfo.pSignalSemaphores = signalSemaphores;
 
-            if (vkQueueSubmit(device.queue, 1, &submitInfo2, swapchain.inFlightFences[swapchain.currentFrame]) != VK_SUCCESS) {
+            if (vkQueueSubmit(device.queue, 1, &submitInfo, swapchain.inFlightFences[swapchain.currentFrame]) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to submit draw command buffer!");
             }
 
@@ -522,11 +414,8 @@ int main() {
         vkDeviceWaitIdle(device.device);
 
         // Cleanup
-        destroyBuffer(device, vertexBuffer);
-        destroyBuffer(device, triangleBuffer);
-        vkDestroySampler(device.device, atlasSampler, nullptr);
-        destroyTextPipeline(device, textPipeline);
-        destroyTrianglePipeline(device, trianglePipeline);
+        terrainExample.reset(); // Destroy terrain before command pool
+        vkDestroyCommandPool(device.device, commandPool, nullptr);
         
         // Destroy imageAvailable semaphores (one per frame-in-flight)
         for (size_t i = 0; i < swapchain.imageAvailableSemaphores.size(); i++) {
@@ -547,15 +436,12 @@ int main() {
         destroySurface(device.instance, surface);
         vkDestroySemaphore(device.device, device.timelineSemaphore, nullptr);
         
-        // Destroy atlas before VMA cleanup (atlas contains VMA-allocated resources)
-        atlas.reset();
-        
         cleanupVma(device);
         vkDestroyDevice(device.device, nullptr);
         cleanupVulkan(device);
         window.cleanup();
 
-        std::cout << "Application closed successfully." << std::endl;
+        std::cout << "Terrain renderer closed successfully." << std::endl;
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

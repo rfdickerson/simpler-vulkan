@@ -67,16 +67,21 @@ void Window::onMouseButton(int button, int action, int mods) {
 
 void Window::onMouseMove(double xpos, double ypos) {
     if (rightMousePressed) {
-        // Calculate mouse delta
         double deltaX = xpos - lastMouseX;
         double deltaY = ypos - lastMouseY;
         
-        // Update camera offset
         cameraOffsetX += static_cast<float>(deltaX);
         cameraOffsetY += static_cast<float>(deltaY);
         
-        // Update last mouse position
         lastMouseX = xpos;
         lastMouseY = ypos;
     }
+}
+
+bool Window::consumeCameraPanDelta(float& outDx, float& outDy) {
+	outDx = cameraOffsetX;
+	outDy = cameraOffsetY;
+	cameraOffsetX = 0.0f;
+	cameraOffsetY = 0.0f;
+	return (outDx != 0.0f || outDy != 0.0f);
 }
