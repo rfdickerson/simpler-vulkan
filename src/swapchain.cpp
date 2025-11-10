@@ -135,8 +135,11 @@ void createSwapchain(Device& device, VkSurfaceKHR surface, Window& window, Swapc
     }
 
     // Create synchronization objects
+    // imageAvailable: one per frame-in-flight (we don't know which image we'll get before acquire)
     swapchain.imageAvailableSemaphores.resize(Swapchain::MAX_FRAMES_IN_FLIGHT);
-    swapchain.renderFinishedSemaphores.resize(Swapchain::MAX_FRAMES_IN_FLIGHT);
+    // renderFinished: one per swapchain image (recommended by validation layers to avoid reuse)
+    swapchain.renderFinishedSemaphores.resize(imageCount);
+    // fences: one per frame-in-flight for CPU-GPU sync
     swapchain.inFlightFences.resize(Swapchain::MAX_FRAMES_IN_FLIGHT);
 
     VkSemaphoreCreateInfo semaphoreInfo{};
@@ -146,11 +149,24 @@ void createSwapchain(Device& device, VkSurfaceKHR surface, Window& window, Swapc
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
+    // Create imageAvailable semaphores (per frame-in-flight)
     for (size_t i = 0; i < Swapchain::MAX_FRAMES_IN_FLIGHT; i++) {
-        if (vkCreateSemaphore(device.device, &semaphoreInfo, nullptr, &swapchain.imageAvailableSemaphores[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(device.device, &semaphoreInfo, nullptr, &swapchain.renderFinishedSemaphores[i]) != VK_SUCCESS ||
-            vkCreateFence(device.device, &fenceInfo, nullptr, &swapchain.inFlightFences[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create synchronization objects!");
+        if (vkCreateSemaphore(device.device, &semaphoreInfo, nullptr, &swapchain.imageAvailableSemaphores[i]) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create imageAvailable semaphores!");
+        }
+    }
+
+    // Create renderFinished semaphores (per swapchain image)
+    for (size_t i = 0; i < imageCount; i++) {
+        if (vkCreateSemaphore(device.device, &semaphoreInfo, nullptr, &swapchain.renderFinishedSemaphores[i]) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create renderFinished semaphores!");
+        }
+    }
+
+    // Create fences for frame-in-flight tracking
+    for (size_t i = 0; i < Swapchain::MAX_FRAMES_IN_FLIGHT; i++) {
+        if (vkCreateFence(device.device, &fenceInfo, nullptr, &swapchain.inFlightFences[i]) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create fences!");
         }
     }
 
@@ -211,7 +227,7 @@ bool presentImage(Device& device, VkSurfaceKHR surface, Swapchain& swapchain) {
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = &swapchain.renderFinishedSemaphores[swapchain.currentFrame];
+    presentInfo.pWaitSemaphores = &swapchain.renderFinishedSemaphores[swapchain.currentImageIndex];
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &swapchain.swapchain;
     presentInfo.pImageIndices = &swapchain.currentImageIndex;

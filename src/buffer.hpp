@@ -11,4 +11,5 @@ struct Buffer {
 };
 
 Buffer CreateSsboBuffer(Device& device, VkDeviceSize size);
+Buffer CreateVertexBuffer(Device& device, VkDeviceSize size);
 void   destroyBuffer(Device& device, Buffer& buffer);

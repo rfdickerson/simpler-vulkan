@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <vector>
 #include <cstdint>
+#include <memory>
 
 #include "device.hpp"
 #include "buffer.hpp"
@@ -238,16 +239,16 @@ int main() {
         Swapchain swapchain;
         createSwapchain(device, surface, window, swapchain);
 
-        // Setup text rendering
-        GlyphAtlas atlas(device, 2048, 2048);
-        atlas.loadFont("../assets/fonts/EBGaramond-Regular.ttf", 32);
+        // Setup text rendering (using unique_ptr to control destruction order)
+        std::unique_ptr<GlyphAtlas> atlas = std::make_unique<GlyphAtlas>(device, 2048, 2048);
+        atlas->loadFont("../assets/fonts/EBGaramond-Regular.ttf", 32);
 
         HbShaper  shaper("../assets/fonts/EBGaramond-Regular.ttf", 32);
         auto shapedGlyphs = shaper.shape_utf8("Alexandria");
 
         // Add glyphs to atlas
         for (const auto& g : shapedGlyphs) {
-            atlas.addGlyph(g.glyph_index);
+            atlas->addGlyph(g.glyph_index);
         }
 
         // Create command pool and buffer for atlas upload
@@ -275,7 +276,7 @@ int main() {
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         vkBeginCommandBuffer(uploadCmd, &beginInfo);
         
-        atlas.finalizeAtlas(uploadCmd);
+        Buffer atlasStagingBuffer = atlas->finalizeAtlas(uploadCmd);
         
         vkEndCommandBuffer(uploadCmd);
 
@@ -287,6 +288,9 @@ int main() {
 
         vkQueueSubmit(device.queue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(device.queue);
+
+        // Now it's safe to destroy the staging buffer
+        destroyBuffer(device, atlasStagingBuffer);
 
         vkDestroyCommandPool(device.device, uploadCommandPool, nullptr);
 
@@ -305,7 +309,7 @@ int main() {
 
         // Create triangle vertex buffer (we'll update this each frame)
         VkDeviceSize triangleBufferSize = sizeof(ColoredVertex) * triangleVertices.size();
-        Buffer triangleBuffer = CreateSsboBuffer(device, triangleBufferSize);
+        Buffer triangleBuffer = CreateVertexBuffer(device, triangleBufferSize);
 
         // Create text rendering pipeline
         TextPipeline textPipeline{};
@@ -314,14 +318,14 @@ int main() {
 
         // Create atlas sampler and update descriptor set
         VkSampler atlasSampler = createAtlasSampler(device);
-        updateTextDescriptorSet(device, textPipeline, atlas.getAtlasImage().view, atlasSampler);
+        updateTextDescriptorSet(device, textPipeline, atlas->getAtlasImage().view, atlasSampler);
 
         // Build initial text vertices
-        std::vector<TextVertex> textVertices = buildTextVertices(shapedGlyphs, atlas, 50.0f, 300.0f);
+        std::vector<TextVertex> textVertices = buildTextVertices(shapedGlyphs, *atlas, 50.0f, 300.0f);
         
         // Create vertex buffer (we'll update this each frame)
         VkDeviceSize vertexBufferSize = sizeof(TextVertex) * textVertices.size();
-        Buffer vertexBuffer = CreateSsboBuffer(device, vertexBufferSize);
+        Buffer vertexBuffer = CreateVertexBuffer(device, vertexBufferSize);
 
         std::cout << "Rendering " << textVertices.size() << " text vertices and " 
                   << triangleVertices.size() << " triangle vertices..." << std::endl;
@@ -339,7 +343,7 @@ int main() {
             }
 
             // Update text vertices with camera offset
-            textVertices = buildTextVertices(shapedGlyphs, atlas, 
+            textVertices = buildTextVertices(shapedGlyphs, *atlas, 
                                             50.0f + window.cameraOffsetX, 
                                             300.0f + window.cameraOffsetY);
             void* data;
@@ -490,6 +494,7 @@ int main() {
             VkSubmitInfo submitInfo2{};
             submitInfo2.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
             
+            // Wait on imageAvailable (indexed by currentFrame, from acquire)
             VkSemaphore waitSemaphores[] = {swapchain.imageAvailableSemaphores[swapchain.currentFrame]};
             VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
             submitInfo2.waitSemaphoreCount = 1;
@@ -498,7 +503,8 @@ int main() {
             submitInfo2.commandBufferCount = 1;
             submitInfo2.pCommandBuffers = &cmd;
             
-            VkSemaphore signalSemaphores[] = {swapchain.renderFinishedSemaphores[swapchain.currentFrame]};
+            // Signal renderFinished (indexed by currentImageIndex, for present)
+            VkSemaphore signalSemaphores[] = {swapchain.renderFinishedSemaphores[swapchain.currentImageIndex]};
             submitInfo2.signalSemaphoreCount = 1;
             submitInfo2.pSignalSemaphores = signalSemaphores;
 
@@ -522,15 +528,28 @@ int main() {
         destroyTextPipeline(device, textPipeline);
         destroyTrianglePipeline(device, trianglePipeline);
         
-        for (size_t i = 0; i < swapchain.MAX_FRAMES_IN_FLIGHT; i++) {
+        // Destroy imageAvailable semaphores (one per frame-in-flight)
+        for (size_t i = 0; i < swapchain.imageAvailableSemaphores.size(); i++) {
             vkDestroySemaphore(device.device, swapchain.imageAvailableSemaphores[i], nullptr);
+        }
+        
+        // Destroy renderFinished semaphores (one per swapchain image)
+        for (size_t i = 0; i < swapchain.renderFinishedSemaphores.size(); i++) {
             vkDestroySemaphore(device.device, swapchain.renderFinishedSemaphores[i], nullptr);
+        }
+        
+        // Destroy fences (one per frame-in-flight)
+        for (size_t i = 0; i < swapchain.MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroyFence(device.device, swapchain.inFlightFences[i], nullptr);
         }
         
         cleanupSwapchain(device, swapchain);
         destroySurface(device.instance, surface);
         vkDestroySemaphore(device.device, device.timelineSemaphore, nullptr);
+        
+        // Destroy atlas before VMA cleanup (atlas contains VMA-allocated resources)
+        atlas.reset();
+        
         cleanupVma(device);
         vkDestroyDevice(device.device, nullptr);
         cleanupVulkan(device);

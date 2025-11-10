@@ -132,8 +132,8 @@ void copyBufferToImage(VkCommandBuffer cmd, VkBuffer buffer, VkImage image,
     vkCmdCopyBufferToImage(cmd, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
-void uploadImageData(Device& device, VkCommandBuffer cmd, Image& image, 
-                     const void* data, size_t dataSize) {
+Buffer uploadImageData(Device& device, VkCommandBuffer cmd, Image& image, 
+                       const void* data, size_t dataSize) {
     // Create staging buffer
     Buffer stagingBuffer = CreateSsboBuffer(device, dataSize);
     
@@ -158,7 +158,7 @@ void uploadImageData(Device& device, VkCommandBuffer cmd, Image& image,
                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                          image.mipLevels);
 
-    // Clean up staging buffer
-    destroyBuffer(device, stagingBuffer);
+    // Return staging buffer - caller must destroy it after command buffer submission
+    return stagingBuffer;
 }
 

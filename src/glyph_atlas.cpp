@@ -124,10 +124,10 @@ const GlyphInfo* GlyphAtlas::getGlyphInfo(uint32_t glyphIndex) const {
     return nullptr;
 }
 
-void GlyphAtlas::finalizeAtlas(VkCommandBuffer cmd) {
+Buffer GlyphAtlas::finalizeAtlas(VkCommandBuffer cmd) {
     if (finalized_) {
         std::cerr << "Atlas already finalized!" << std::endl;
-        return;
+        return Buffer{VK_NULL_HANDLE, nullptr};
     }
 
     // Create image
@@ -139,13 +139,15 @@ void GlyphAtlas::finalizeAtlas(VkCommandBuffer cmd) {
     // Create image view
     createImageView(device_, atlasImage_);
 
-    // Upload atlas data to GPU
-    uploadImageData(device_, cmd, atlasImage_, atlasData_.data(), atlasData_.size());
+    // Upload atlas data to GPU - returns staging buffer that must be destroyed by caller after submission
+    Buffer stagingBuffer = uploadImageData(device_, cmd, atlasImage_, atlasData_.data(), atlasData_.size());
 
     finalized_ = true;
 
     std::cout << "Atlas finalized: " << glyphMap_.size() << " glyphs, "
               << atlasWidth_ << "x" << atlasHeight_ << " pixels" << std::endl;
+    
+    return stagingBuffer;
 }
 
 bool GlyphAtlas::findSpaceForGlyph(uint32_t width, uint32_t height, 

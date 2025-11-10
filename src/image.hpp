@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 
 struct Device;
+struct Buffer;
 
 struct Image {
     VkImage       image;
@@ -36,6 +37,7 @@ void copyBufferToImage(VkCommandBuffer cmd, VkBuffer buffer, VkImage image,
                        uint32_t width, uint32_t height);
 
 // Create a staging buffer and upload data to an image
-void uploadImageData(Device& device, VkCommandBuffer cmd, Image& image, 
-                     const void* data, size_t dataSize);
+// Returns the staging buffer which must be destroyed by the caller after the command buffer is submitted
+Buffer uploadImageData(Device& device, VkCommandBuffer cmd, Image& image, 
+                       const void* data, size_t dataSize);
 

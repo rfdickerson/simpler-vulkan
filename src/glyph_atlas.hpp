@@ -7,6 +7,7 @@
 #include <vector>
 
 struct Device;
+struct Buffer;
 
 struct GlyphInfo {
     uint32_t glyphIndex;
@@ -32,7 +33,8 @@ public:
     const GlyphInfo* getGlyphInfo(uint32_t glyphIndex) const;
 
     // Finalize the atlas and upload to GPU
-    void finalizeAtlas(VkCommandBuffer cmd);
+    // Returns the staging buffer which must be destroyed by the caller after command buffer submission
+    Buffer finalizeAtlas(VkCommandBuffer cmd);
 
     // Get the atlas image
     const Image& getAtlasImage() const { return atlasImage_; }
