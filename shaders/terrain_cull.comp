@@ -1,0 +1,83 @@
+#version 450
+
+// Workgroup size
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// Hex tile data (input)
+struct HexTile {
+    vec2 hexCoord;  // q, r coordinates
+    float height;
+    uint terrainType;
+};
+
+// Culling parameters
+layout(binding = 0) uniform CullParams {
+    mat4 viewProj;
+    vec4 frustumPlanes[6]; // 6 frustum planes (normal.xyz, distance)
+    vec3 cameraPos;
+    float hexSize;
+    uint tileCount;
+    uint padding[3];
+} params;
+
+// Input: all tiles
+layout(binding = 1) readonly buffer TileBuffer {
+    HexTile tiles[];
+} inputTiles;
+
+// Output: visible tile indices
+layout(binding = 2) writeonly buffer VisibleTileIndices {
+    uint indices[];
+} visibleIndices;
+
+// Output: count of visible tiles (atomic counter)
+layout(binding = 3) buffer CounterBuffer {
+    uint visibleCount;
+} counter;
+
+// Convert hex coordinates to world position
+vec3 hexToWorld(vec2 hexCoord, float hexSize) {
+    float x = hexSize * (3.0 / 2.0 * hexCoord.x);
+    float z = hexSize * (sqrt(3.0) / 2.0 * hexCoord.x + sqrt(3.0) * hexCoord.y);
+    return vec3(x, 0.0, z);
+}
+
+// Check if a sphere is inside the frustum
+bool sphereInFrustum(vec3 center, float radius) {
+    for (int i = 0; i < 6; ++i) {
+        vec4 plane = params.frustumPlanes[i];
+        float distance = dot(plane.xyz, center) + plane.w;
+        
+        if (distance < -radius) {
+            return false; // Outside this plane
+        }
+    }
+    return true;
+}
+
+void main() {
+    uint tileIndex = gl_GlobalInvocationID.x;
+    
+    // Bounds check
+    if (tileIndex >= params.tileCount) {
+        return;
+    }
+    
+    // Get tile data
+    HexTile tile = inputTiles.tiles[tileIndex];
+    
+    // Calculate world position
+    vec3 worldPos = hexToWorld(tile.hexCoord, params.hexSize);
+    worldPos.y = tile.height;
+    
+    // Bounding sphere for the hex (conservative)
+    float boundingRadius = params.hexSize * 1.2; // Slightly larger than actual hex
+    
+    // Frustum culling
+    if (sphereInFrustum(worldPos, boundingRadius)) {
+        // Tile is visible - add to output
+        uint outputIndex = atomicAdd(counter.visibleCount, 1);
+        visibleIndices.indices[outputIndex] = tileIndex;
+    }
+}
+

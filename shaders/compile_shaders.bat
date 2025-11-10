@@ -25,5 +25,23 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
+glslc terrain.vert -o terrain.vert.spv
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to compile terrain.vert
+    exit /b 1
+)
+
+glslc terrain.frag -o terrain.frag.spv
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to compile terrain.frag
+    exit /b 1
+)
+
+glslc terrain_cull.comp -o terrain_cull.comp.spv
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to compile terrain_cull.comp
+    exit /b 1
+)
+
 echo All shaders compiled successfully!
 
