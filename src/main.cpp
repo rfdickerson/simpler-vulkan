@@ -13,6 +13,170 @@
 #include "swapchain.hpp"
 #include "text_pipeline.hpp"
 
+// Colored vertex structure for the triangle
+struct ColoredVertex {
+    float pos[2];    // Position in NDC
+    float color[3];  // RGB color
+};
+
+// Simple pipeline structure for the triangle
+struct TrianglePipeline {
+    VkPipelineLayout pipelineLayout;
+    VkPipeline pipeline;
+};
+
+// Create triangle rendering pipeline
+void createTrianglePipeline(Device& device, Swapchain& swapchain, TrianglePipeline& pipeline) {
+    // Load shaders
+    VkShaderModule vertShaderModule = loadShaderModule(device, "../shaders/triangle.vert.spv");
+    VkShaderModule fragShaderModule = loadShaderModule(device, "../shaders/triangle.frag.spv");
+
+    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStageInfo.module = vertShaderModule;
+    vertShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStageInfo.module = fragShaderModule;
+    fragShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+    // Vertex input
+    VkVertexInputBindingDescription bindingDescription{};
+    bindingDescription.binding = 0;
+    bindingDescription.stride = sizeof(ColoredVertex);
+    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+    attributeDescriptions[0].binding = 0;
+    attributeDescriptions[0].location = 0;
+    attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[0].offset = offsetof(ColoredVertex, pos);
+
+    attributeDescriptions[1].binding = 0;
+    attributeDescriptions[1].location = 1;
+    attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[1].offset = offsetof(ColoredVertex, color);
+
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.vertexBindingDescriptionCount = 1;
+    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
+    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+
+    // Input assembly
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+    // Viewport and scissor (dynamic)
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    // Rasterization
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE;
+
+    // Multisampling
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    // Blending (no blending for solid triangle)
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.blendEnable = VK_FALSE;
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+
+    // Dynamic states
+    std::vector<VkDynamicState> dynamicStates = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicState.pDynamicStates = dynamicStates.data();
+
+    // Pipeline layout (no descriptors or push constants needed)
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 0;
+    pipelineLayoutInfo.pushConstantRangeCount = 0;
+
+    if (vkCreatePipelineLayout(device.device, &pipelineLayoutInfo, nullptr, &pipeline.pipelineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create triangle pipeline layout!");
+    }
+
+    // Dynamic rendering info
+    VkFormat colorFormat = swapchain.format;
+    VkPipelineRenderingCreateInfo renderingInfo{};
+    renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachmentFormats = &colorFormat;
+
+    // Create graphics pipeline
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.pNext = &renderingInfo;
+    pipelineInfo.stageCount = 2;
+    pipelineInfo.pStages = shaderStages;
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = pipeline.pipelineLayout;
+    pipelineInfo.renderPass = VK_NULL_HANDLE;
+    pipelineInfo.subpass = 0;
+
+    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline.pipeline) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create triangle graphics pipeline!");
+    }
+
+    // Cleanup shader modules
+    vkDestroyShaderModule(device.device, vertShaderModule, nullptr);
+    vkDestroyShaderModule(device.device, fragShaderModule, nullptr);
+
+    std::cout << "Triangle pipeline created successfully." << std::endl;
+}
+
+void destroyTrianglePipeline(Device& device, TrianglePipeline& pipeline) {
+    if (pipeline.pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(device.device, pipeline.pipeline, nullptr);
+        pipeline.pipeline = VK_NULL_HANDLE;
+    }
+    if (pipeline.pipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(device.device, pipeline.pipelineLayout, nullptr);
+        pipeline.pipelineLayout = VK_NULL_HANDLE;
+    }
+}
+
 // Helper function to build text vertex buffer from shaped glyphs
 std::vector<TextVertex> buildTextVertices(const std::vector<ShapedGlyph>& shapedGlyphs,
                                          const GlyphAtlas& atlas,
@@ -76,10 +240,10 @@ int main() {
 
         // Setup text rendering
         GlyphAtlas atlas(device, 2048, 2048);
-        atlas.loadFont("../assets/fonts/EBGaramond-Regular.ttf", 64);
+        atlas.loadFont("../assets/fonts/EBGaramond-Regular.ttf", 32);
 
-        HbShaper shaper("../assets/fonts/EBGaramond-Regular.ttf", 64);
-        auto shapedGlyphs = shaper.shape_utf8("Hello, Vulkan Text Rendering!");
+        HbShaper  shaper("../assets/fonts/EBGaramond-Regular.ttf", 32);
+        auto shapedGlyphs = shaper.shape_utf8("Alexandria");
 
         // Add glyphs to atlas
         for (const auto& g : shapedGlyphs) {
@@ -126,6 +290,23 @@ int main() {
 
         vkDestroyCommandPool(device.device, uploadCommandPool, nullptr);
 
+        // Create triangle pipeline
+        TrianglePipeline trianglePipeline{};
+        createTrianglePipeline(device, swapchain, trianglePipeline);
+
+        // Create colored triangle vertices (positioned beneath the text in NDC)
+        // Base positions that will be offset by camera
+        const std::vector<ColoredVertex> baseTriangleVertices = {
+            {{-0.3f, 0.2f}, {1.0f, 0.0f, 0.0f}},  // Top vertex - Red
+            {{-0.6f, 0.6f}, {0.0f, 1.0f, 0.0f}},  // Bottom left - Green
+            {{ 0.0f, 0.6f}, {0.0f, 0.0f, 1.0f}}   // Bottom right - Blue
+        };
+        std::vector<ColoredVertex> triangleVertices = baseTriangleVertices;
+
+        // Create triangle vertex buffer (we'll update this each frame)
+        VkDeviceSize triangleBufferSize = sizeof(ColoredVertex) * triangleVertices.size();
+        Buffer triangleBuffer = CreateSsboBuffer(device, triangleBufferSize);
+
         // Create text rendering pipeline
         TextPipeline textPipeline{};
         createTextPipeline(device, swapchain, textPipeline);
@@ -135,20 +316,15 @@ int main() {
         VkSampler atlasSampler = createAtlasSampler(device);
         updateTextDescriptorSet(device, textPipeline, atlas.getAtlasImage().view, atlasSampler);
 
-        // Build text vertices
+        // Build initial text vertices
         std::vector<TextVertex> textVertices = buildTextVertices(shapedGlyphs, atlas, 50.0f, 300.0f);
         
-        // Create vertex buffer
+        // Create vertex buffer (we'll update this each frame)
         VkDeviceSize vertexBufferSize = sizeof(TextVertex) * textVertices.size();
         Buffer vertexBuffer = CreateSsboBuffer(device, vertexBufferSize);
-        
-        // Upload vertex data
-        void* data;
-        vmaMapMemory(device.allocator, vertexBuffer.allocation, &data);
-        memcpy(data, textVertices.data(), vertexBufferSize);
-        vmaUnmapMemory(device.allocator, vertexBuffer.allocation);
 
-        std::cout << "Rendering " << textVertices.size() << " vertices..." << std::endl;
+        std::cout << "Rendering " << textVertices.size() << " text vertices and " 
+                  << triangleVertices.size() << " triangle vertices..." << std::endl;
 
         bool framebufferResized = false;
 
@@ -161,6 +337,29 @@ int main() {
                 recreateSwapchain(device, surface, window, swapchain);
                 framebufferResized = false;
             }
+
+            // Update text vertices with camera offset
+            textVertices = buildTextVertices(shapedGlyphs, atlas, 
+                                            50.0f + window.cameraOffsetX, 
+                                            300.0f + window.cameraOffsetY);
+            void* data;
+            vmaMapMemory(device.allocator, vertexBuffer.allocation, &data);
+            memcpy(data, textVertices.data(), vertexBufferSize);
+            vmaUnmapMemory(device.allocator, vertexBuffer.allocation);
+
+            // Update triangle vertices with camera offset (convert pixel offset to NDC)
+            float ndcOffsetX = (window.cameraOffsetX / static_cast<float>(swapchain.extent.width)) * 2.0f;
+            float ndcOffsetY = (window.cameraOffsetY / static_cast<float>(swapchain.extent.height)) * 2.0f;
+            
+            for (size_t i = 0; i < triangleVertices.size(); ++i) {
+                triangleVertices[i].pos[0] = baseTriangleVertices[i].pos[0] + ndcOffsetX;
+                triangleVertices[i].pos[1] = baseTriangleVertices[i].pos[1] + ndcOffsetY;
+            }
+            
+            void* triangleData;
+            vmaMapMemory(device.allocator, triangleBuffer.allocation, &triangleData);
+            memcpy(triangleData, triangleVertices.data(), triangleBufferSize);
+            vmaUnmapMemory(device.allocator, triangleBuffer.allocation);
 
             // Acquire next image
             if (!acquireNextImage(device, swapchain)) {
@@ -217,10 +416,10 @@ int main() {
 
             vkCmdBeginRendering(cmd, &renderingInfo);
 
-            // Bind pipeline
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, textPipeline.pipeline);
-
-            // Set viewport and scissor
+            // Draw triangle first (so it appears beneath text)
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline.pipeline);
+            
+            // Set viewport and scissor for triangle
             VkViewport viewport{};
             viewport.x = 0.0f;
             viewport.y = 0.0f;
@@ -234,6 +433,20 @@ int main() {
             scissor.offset = {0, 0};
             scissor.extent = swapchain.extent;
             vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+            // Bind triangle vertex buffer
+            VkBuffer triangleBuffers[] = {triangleBuffer.buffer};
+            VkDeviceSize triangleOffsets[] = {0};
+            vkCmdBindVertexBuffers(cmd, 0, 1, triangleBuffers, triangleOffsets);
+
+            // Draw triangle
+            vkCmdDraw(cmd, 3, 1, 0, 0);
+
+            // Now draw text on top
+            // Bind pipeline
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, textPipeline.pipeline);
+
+            // Viewport and scissor already set (no need to set again)
 
             // Push constants
             TextPushConstants pushConstants{};
@@ -304,8 +517,10 @@ int main() {
 
         // Cleanup
         destroyBuffer(device, vertexBuffer);
+        destroyBuffer(device, triangleBuffer);
         vkDestroySampler(device.device, atlasSampler, nullptr);
         destroyTextPipeline(device, textPipeline);
+        destroyTrianglePipeline(device, trianglePipeline);
         
         for (size_t i = 0; i < swapchain.MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(device.device, swapchain.imageAvailableSemaphores[i], nullptr);

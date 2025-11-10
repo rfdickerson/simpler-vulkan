@@ -52,10 +52,12 @@ class HbShaper {
         if (lang)
             hb_buffer_set_language(buf, hb_language_from_string(lang, -1));
 
-        // Features: enable ligatures, kerning, etc. by default
+        // Features: enable comprehensive OpenType features
+        // Common ligatures, kerning, contextual alternates, etc.
         hb_feature_t features[] = {
-            {HB_TAG('k', 'e', 'r', 'n'), 1, 0, (unsigned int)-1},
-            {HB_TAG('l', 'i', 'g', 'a'), 1, 0, (unsigned int)-1},
+            {HB_TAG('k', 'e', 'r', 'n'), 1, 0, (unsigned int)-1},  // Kerning
+            {HB_TAG('l', 'i', 'g', 'a'), 1, 0, (unsigned int)-1},  // Standard ligatures (fi, fl, etc.)
+            {HB_TAG('c', 'l', 'i', 'g'), 1, 0, (unsigned int)-1},  // Contextual ligatures
         };
 
         hb_shape(hb_font_, buf, features, sizeof(features) / sizeof(features[0]));
