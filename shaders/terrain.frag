@@ -164,12 +164,65 @@ vec3 calculateLighting(vec3 baseColor, vec3 normal, vec3 worldPos) {
     return (ambient + diffuse + specular) * ao;
 }
 
+// Simple procedural sky model to serve as environment for reflections
+vec3 sampleSky(vec3 dir) {
+	vec3 d = normalize(dir);
+	float t = clamp(d.y * 0.5 + 0.5, 0.0, 1.0); // up factor
+
+	// Horizon and zenith colors
+	vec3 horizon = vec3(0.65, 0.78, 0.92);
+	vec3 zenith  = vec3(0.09, 0.22, 0.45);
+	vec3 skyBase = mix(horizon, zenith, t);
+
+	// Soft sun glow in the direction of the sun
+	vec3 sunDir = normalize(-terrain.sunDirection);
+	float sunAmt = max(dot(sunDir, d), 0.0);
+	float sunDisc = pow(sunAmt, 900.0) * 20.0;     // tight core
+	float sunHalo = pow(sunAmt, 8.0) * 0.3;        // wide halo
+	vec3 sunColor = terrain.sunColor;
+
+	return skyBase + sunColor * (sunHalo + sunDisc);
+}
+
+// Schlick Fresnel approximation
+float fresnelSchlick(float cosTheta, float F0) {
+	return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
 void main() {
     // Get base terrain color based on terrain type
     vec3 baseColor = getTerrainColor(fragTerrainType, fragHexCoord);
     
     // Calculate lighting
     vec3 litColor = calculateLighting(baseColor, fragNormal, fragWorldPos);
+
+	// Reflective water from procedural environment sky
+	bool isWater = (fragTerrainType == 0u || fragTerrainType == 1u || fragTerrainType == 14u);
+	if (isWater) {
+		// Base normal and simple animated perturbation for ripples
+		vec3 N = normalize(fragNormal);
+		float t = pc.time;
+		float w1 = noise(fragWorldPos.xz * 0.12 + vec2(t * 0.07, 0.0));
+		float w2 = noise(fragWorldPos.xz * 0.21 + vec2(0.0, t * 0.11));
+		vec3 ripple = vec3(w1 - 0.5, 0.0, w2 - 0.5);
+		vec3 Np = normalize(N + ripple * 0.25);
+
+		// View and reflection
+		vec3 V = normalize(pc.cameraPos - fragWorldPos);
+		vec3 R = reflect(-V, Np);
+
+		// Sample procedural sky environment
+		vec3 env = sampleSky(R);
+
+		// Water Fresnel (low F0)
+		float F = fresnelSchlick(max(dot(Np, V), 0.0), 0.02);
+
+		// Slightly tinted transmission (no true refraction yet)
+		vec3 transmission = baseColor * (0.35 + 0.25 * clamp(Np.y, 0.0, 1.0)) * terrain.ambientIntensity;
+
+		// Blend reflection with transmission
+		litColor = mix(transmission, env, clamp(F + 0.15, 0.0, 1.0));
+	}
     
 	// Compute precise hex-edge factor using SDF in local hex coordinates
 	vec2 centerXZ = axialToWorldXZFlatTop(fragHexCoord, terrain.hexSize);
