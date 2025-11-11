@@ -11,6 +11,7 @@ struct RenderAttachment {
     VkImageView colorView{VK_NULL_HANDLE};
     VkImageView resolveView{VK_NULL_HANDLE};
     VkImageView depthView{VK_NULL_HANDLE};
+    VkImageView depthResolveView{VK_NULL_HANDLE};
     VkExtent2D extent{};
     VkSampleCountFlagBits samples{VK_SAMPLE_COUNT_1_BIT};
     VkFormat colorFormat{VK_FORMAT_UNDEFINED};
@@ -20,6 +21,7 @@ struct RenderAttachment {
     VkImage colorImage{VK_NULL_HANDLE};
     VkImage resolveImage{VK_NULL_HANDLE};
     VkImage depthImage{VK_NULL_HANDLE};
+    VkImage depthResolveImage{VK_NULL_HANDLE};
 };
 
 struct RenderPassDesc {
@@ -29,6 +31,9 @@ struct RenderPassDesc {
     float clearDepth{1.0f};
     uint32_t clearStencil{0};
     VkAttachmentLoadOp depthLoadOp{VK_ATTACHMENT_LOAD_OP_CLEAR}; // Control depth load operation
+    bool depthReadOnly{false}; // If true, transition/use depth as READ_ONLY for sampling
+    // Images that will be sampled in this pass (transition to SHADER_READ_ONLY_OPTIMAL)
+    std::vector<VkImage> sampledImages;
     std::function<void(VkCommandBuffer)> record;
 };
 

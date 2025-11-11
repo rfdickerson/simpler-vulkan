@@ -103,19 +103,28 @@ void RenderGraph::execute() {
                 b.srcAccessMask = 0;
             }
             
-            // Determine destination access based on load operation
-            if (pass.depthLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
-                // Loading existing depth - need read access
-                b.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-                b.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            // Determine destination access based on target usage
+            if (pass.depthReadOnly) {
+                // We will sample or read-only: transition to READ_ONLY optimal
+                b.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+                b.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT;
             } else {
-                // Clearing depth - just write access
-                b.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-                b.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                // Attachment usage
+                if (pass.depthLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
+                    // Loading existing depth - need read access
+                    b.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+                    b.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                } else {
+                    // Clearing depth - just write access
+                    b.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+                    b.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+                }
             }
             
             b.oldLayout = oldLayout;
-            b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            b.newLayout = pass.depthReadOnly
+                ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             b.image = pass.attachments.depthImage;
             b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
             b.subresourceRange.baseMipLevel = 0;
@@ -123,7 +132,58 @@ void RenderGraph::execute() {
             b.subresourceRange.baseArrayLayer = 0;
             b.subresourceRange.layerCount = 1;
             lastDepthImage = pass.attachments.depthImage;
-            imageLayouts[pass.attachments.depthImage] = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            imageLayouts[pass.attachments.depthImage] = b.newLayout;
+        }
+
+        // Depth resolve target (single-sample) if provided
+        if (pass.attachments.depthResolveImage != VK_NULL_HANDLE) {
+            auto& b = barriers[barrierCount++];
+            b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+            VkImage oldImg = pass.attachments.depthResolveImage;
+            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            auto it = imageLayouts.find(oldImg);
+            if (it != imageLayouts.end()) {
+                oldLayout = it->second;
+            }
+            // Destination is depth attachment write (resolve destination)
+            b.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            b.srcAccessMask = 0;
+            b.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            b.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            b.oldLayout = oldLayout;
+            b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            b.image = pass.attachments.depthResolveImage;
+            b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            b.subresourceRange.baseMipLevel = 0;
+            b.subresourceRange.levelCount = 1;
+            b.subresourceRange.baseArrayLayer = 0;
+            b.subresourceRange.layerCount = 1;
+            imageLayouts[pass.attachments.depthResolveImage] = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        }
+
+        // Any sampled images requested by this pass
+        for (VkImage sampled : pass.sampledImages) {
+            auto& b = barriers[barrierCount++];
+            b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            auto it = imageLayouts.find(sampled);
+            if (it != imageLayouts.end()) {
+                oldLayout = it->second;
+            }
+            // Transition from whatever (likely COLOR_ATTACHMENT_OPTIMAL) to SHADER_READ_ONLY
+            b.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            b.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            b.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+            b.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT;
+            b.oldLayout = oldLayout;
+            b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            b.image = sampled;
+            b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // assume color; if depth, caller should use depthReadOnly
+            b.subresourceRange.baseMipLevel = 0;
+            b.subresourceRange.levelCount = 1;
+            b.subresourceRange.baseArrayLayer = 0;
+            b.subresourceRange.layerCount = 1;
+            imageLayouts[sampled] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
 
         if (barrierCount > 0) {
@@ -160,10 +220,18 @@ void RenderGraph::execute() {
         if (pass.attachments.depthView != VK_NULL_HANDLE) {
             depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             depthAttachment.imageView = pass.attachments.depthView;
-            depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            depthAttachment.imageLayout = pass.depthReadOnly
+                ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             depthAttachment.loadOp = pass.depthLoadOp;
-            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Store depth for subsequent passes
+            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Preserve depth for subsequent passes
             depthAttachment.clearValue.depthStencil = { pass.clearDepth, pass.clearStencil };
+            // Depth resolve to single-sample if provided
+            if (pass.attachments.depthResolveView != VK_NULL_HANDLE) {
+                depthAttachment.resolveMode = VK_RESOLVE_MODE_MIN_BIT;
+                depthAttachment.resolveImageView = pass.attachments.depthResolveView;
+                depthAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            }
             pDepthAttachment = &depthAttachment;
         }
 

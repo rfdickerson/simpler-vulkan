@@ -67,5 +67,17 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
+glslc ssao.vert -o ssao.vert.spv
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to compile ssao.vert
+    exit /b 1
+)
+
+glslc ssao.frag -o ssao.frag.spv
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to compile ssao.frag
+    exit /b 1
+)
+
 echo All shaders compiled successfully!
 

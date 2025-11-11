@@ -26,6 +26,14 @@ struct Swapchain {
     // Depth buffer
     Image depthImage;
     VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
+
+    // SSAO target (R8_UNORM single-channel) and sampler
+    Image ssaoImage;
+    VkFormat ssaoFormat = VK_FORMAT_R8_UNORM;
+    VkSampler ssaoSampler = VK_NULL_HANDLE;
+
+    // Single-sample depth resolved for SSAO sampling
+    Image depthResolved;
     
     uint32_t currentImageIndex = 0;
     

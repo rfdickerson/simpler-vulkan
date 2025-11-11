@@ -158,12 +158,44 @@ void createSwapchain(Device& device, VkSurfaceKHR surface, Window& window, Swapc
         swapchain.msaaColor = {}; // zero-init
     }
 
-    // Create depth buffer
+    // Create depth buffer (also sampleable for SSAO)
     swapchain.depthImage = createImage(device, extent.width, extent.height, swapchain.depthFormat,
-                                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                                        VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
                                        1, swapchain.msaaSamples);
     createImageView(device, swapchain.depthImage, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    // Create SSAO target (single-sampled color, sampled later)
+    swapchain.ssaoImage = createImage(device, extent.width, extent.height, swapchain.ssaoFormat,
+                                      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                                      VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                                      1, VK_SAMPLE_COUNT_1_BIT);
+    createImageView(device, swapchain.ssaoImage, VK_IMAGE_ASPECT_COLOR_BIT);
+
+    // Create resolved depth (single-sample) for SSAO sampling
+    swapchain.depthResolved = createImage(device, extent.width, extent.height, swapchain.depthFormat,
+                                          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                                          VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                                          1, VK_SAMPLE_COUNT_1_BIT);
+    createImageView(device, swapchain.depthResolved, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+    // Create SSAO sampler
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 0.0f;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    if (vkCreateSampler(device.device, &samplerInfo, nullptr, &swapchain.ssaoSampler) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create SSAO sampler!");
+    }
 
     // Create synchronization objects
     // imageAvailable: one per frame-in-flight (we don't know which image we'll get before acquire)
@@ -216,6 +248,22 @@ void cleanupSwapchain(Device& device, Swapchain& swapchain) {
     if (swapchain.depthImage.image != VK_NULL_HANDLE) {
         destroyImage(device, swapchain.depthImage);
         swapchain.depthImage = {};
+    }
+
+    // Destroy resolved depth
+    if (swapchain.depthResolved.image != VK_NULL_HANDLE) {
+        destroyImage(device, swapchain.depthResolved);
+        swapchain.depthResolved = {};
+    }
+
+    // Destroy SSAO target and sampler
+    if (swapchain.ssaoImage.image != VK_NULL_HANDLE) {
+        destroyImage(device, swapchain.ssaoImage);
+        swapchain.ssaoImage = {};
+    }
+    if (swapchain.ssaoSampler != VK_NULL_HANDLE) {
+        vkDestroySampler(device.device, swapchain.ssaoSampler, nullptr);
+        swapchain.ssaoSampler = VK_NULL_HANDLE;
     }
     
     for (auto& img : swapchain.images) {

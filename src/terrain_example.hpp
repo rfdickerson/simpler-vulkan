@@ -8,6 +8,7 @@
 #include "tree_pipeline.hpp"
 #include "camera.hpp"
 #include "map_builder.hpp"
+#include "ssao_pipeline.hpp"
 
 // Example terrain scene setup
 class TerrainExample {
@@ -33,6 +34,10 @@ public:
         createTerrainPipeline(device, swapchain, pipeline);
         createTerrainCommandBuffers(device, pipeline, swapchain.MAX_FRAMES_IN_FLIGHT);
         createTreePipeline(device, swapchain, treePipeline, swapchain.depthFormat);
+        createSSAOPipeline(device, swapchain, ssaoPipeline);
+        // Bind SSAO for terrain and depth for SSAO
+        updateTerrainSsaoDescriptor(device, pipeline, swapchain.ssaoImage.view, swapchain.ssaoSampler);
+        updateSSAODepthDescriptor(device, ssaoPipeline, swapchain);
         
         // Generate trees on grass tiles
         treeRenderer.generateTrees(terrainRenderer);
@@ -43,6 +48,7 @@ public:
     ~TerrainExample() {
         destroyTerrainPipeline(device, pipeline);
         destroyTreePipeline(device, treePipeline);
+        destroySSAOPipeline(device, ssaoPipeline);
     }
     
     void initializeSampleTerrain() {
@@ -180,6 +186,42 @@ public:
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, treePipeline.pipeline);
         treeRenderer.render(cmd, treePipeline.pipelineLayout, viewProj);
     }
+
+    void renderSSAO(VkCommandBuffer cmd) {
+        // Fullscreen viewport
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(swapchain.extent.width);
+        viewport.height = static_cast<float>(swapchain.extent.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = swapchain.extent;
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ssaoPipeline.pipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ssaoPipeline.pipelineLayout, 0, 1, &ssaoPipeline.descriptorSet, 0, nullptr);
+
+        // Push constants
+        SSAOPushConstants pc{};
+        pc.radius = 4.0f;      // stronger radius for visibility
+        pc.bias = 0.010f;      // slightly lower bias
+        pc.intensity = 3.0f;   // stronger contrast
+        glm::mat4 invProj = glm::inverse(camera.getProjectionMatrix());
+        memcpy(pc.invProj, &invProj, sizeof(float) * 16);
+        vkCmdPushConstants(cmd, ssaoPipeline.pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(SSAOPushConstants), &pc);
+
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+    }
+
+    void rebindSsaoDescriptors() {
+        updateTerrainSsaoDescriptor(device, pipeline, swapchain.ssaoImage.view, swapchain.ssaoSampler);
+        updateSSAODepthDescriptor(device, ssaoPipeline, swapchain);
+    }
     
     Camera& getCamera() { return camera; }
     float getHexSize() const { return terrainRenderer.getRenderParams().hexSize; }
@@ -191,6 +233,7 @@ private:
     TreeRenderer treeRenderer;
     TerrainPipeline pipeline;
     TreePipeline treePipeline;
+    SSAOPipeline ssaoPipeline;
     Camera camera;
     float elapsedTime = 0.0f;
 };

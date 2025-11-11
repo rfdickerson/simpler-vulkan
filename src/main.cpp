@@ -332,6 +332,8 @@ int main() {
                 terrainExample->getCamera().setAspectRatio(
                     static_cast<float>(swapchain.extent.width) / 
                     static_cast<float>(swapchain.extent.height));
+                // Rebind dynamic image descriptors
+                terrainExample->rebindSsaoDescriptors();
                 framebufferResized = false;
             }
 
@@ -345,6 +347,8 @@ int main() {
                 terrainExample->getCamera().setAspectRatio(
                     static_cast<float>(swapchain.extent.width) / 
                     static_cast<float>(swapchain.extent.height));
+                // Rebind dynamic image descriptors
+                terrainExample->rebindSsaoDescriptors();
                 continue;
             }
 
@@ -365,6 +369,9 @@ int main() {
             depthAtt.depthFormat = swapchain.depthFormat;
             depthAtt.depthView = swapchain.depthImage.view;
             depthAtt.depthImage = swapchain.depthImage.image;
+            // Resolve depth to single-sample for SSAO
+            depthAtt.depthResolveView = swapchain.depthResolved.view;
+            depthAtt.depthResolveImage = swapchain.depthResolved.image;
             // No color attachments for depth prepass
 
             RenderPassDesc depthPass{};
@@ -378,6 +385,30 @@ int main() {
             };
 
             graph.addPass(depthPass);
+
+            // SSAO pass - writes occlusion to R8 texture, reads resolved depth read-only
+            RenderAttachment ssaoAtt{};
+            ssaoAtt.extent = swapchain.extent;
+            ssaoAtt.samples = VK_SAMPLE_COUNT_1_BIT;
+            ssaoAtt.colorFormat = swapchain.ssaoFormat;
+            ssaoAtt.colorView = swapchain.ssaoImage.view;
+            ssaoAtt.colorImage = swapchain.ssaoImage.image;
+            // Include resolved depth to transition it to read-only layout for sampling
+            ssaoAtt.depthFormat = swapchain.depthFormat;
+            ssaoAtt.depthView = swapchain.depthResolved.view;
+            ssaoAtt.depthImage = swapchain.depthResolved.image;
+
+            RenderPassDesc ssaoPass{};
+            ssaoPass.name = "ssao";
+            ssaoPass.attachments = ssaoAtt;
+            ssaoPass.clearColor = {{1.0f, 0.0f, 0.0f, 0.0f}}; // occlusion default = 1
+            ssaoPass.depthLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+            ssaoPass.depthReadOnly = true;
+            ssaoPass.record = [&](VkCommandBuffer c) {
+                terrainExample->renderSSAO(c);
+            };
+
+            graph.addPass(ssaoPass);
 
             // Main pass - color + depth (load depth from prepass)
             RenderAttachment att{};
@@ -404,6 +435,8 @@ int main() {
             pass.clearDepth = 1.0f;
             pass.clearStencil = 0;
             pass.depthLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Load depth from prepass
+            // Ensure SSAO image is transitioned to SHADER_READ_ONLY for sampling
+            pass.sampledImages.push_back(swapchain.ssaoImage.image);
             pass.record = [&](VkCommandBuffer c) {
                 terrainExample->render(c);
             };

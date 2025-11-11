@@ -52,3 +52,6 @@ void createTerrainCommandBuffers(Device& device, TerrainPipeline& pipeline, uint
 // Update terrain parameters
 void updateTerrainParams(TerrainPipeline& pipeline, const TerrainParamsUBO& params);
 
+// Update SSAO texture binding
+void updateTerrainSsaoDescriptor(Device& device, TerrainPipeline& pipeline, VkImageView ssaoView, VkSampler ssaoSampler);
+

@@ -100,18 +100,23 @@ void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
 
-    // Descriptor set layout (uniform buffer for terrain parameters)
-    VkDescriptorSetLayoutBinding uboBinding{};
-    uboBinding.binding = 0;
-    uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboBinding.descriptorCount = 1;
-    uboBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    uboBinding.pImmutableSamplers = nullptr;
+    // Descriptor set layout (binding 0: UBO, binding 1: SSAO sampler)
+    VkDescriptorSetLayoutBinding bindings[2]{};
+    // UBO
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    // SSAO texture
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &uboBinding;
+    layoutInfo.bindingCount = 2;
+    layoutInfo.pBindings = bindings;
 
     if (vkCreateDescriptorSetLayout(device.device, &layoutInfo, nullptr, &pipeline.descriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create terrain descriptor set layout!");
@@ -226,14 +231,16 @@ void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline
     pipeline.uniformMapped = allocInfoResult.pMappedData;
 
     // Create descriptor pool
-    VkDescriptorPoolSize poolSize{};
-    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = 1;
+    VkDescriptorPoolSize poolSizes[2]{};
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = 1;
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = 1;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.poolSizeCount = 2;
+    poolInfo.pPoolSizes = poolSizes;
     poolInfo.maxSets = 1;
 
     if (vkCreateDescriptorPool(device.device, &poolInfo, nullptr, &pipeline.descriptorPool) != VK_SUCCESS) {
@@ -251,7 +258,7 @@ void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline
         throw std::runtime_error("Failed to allocate terrain descriptor set!");
     }
 
-    // Update descriptor set
+    // Update descriptor set (binding 0: UBO). SSAO (binding 1) updated separately.
     VkDescriptorBufferInfo bufferInfoDesc{};
     bufferInfoDesc.buffer = pipeline.uniformBuffer;
     bufferInfoDesc.offset = 0;
@@ -334,5 +341,23 @@ void createTerrainCommandBuffers(Device& device, TerrainPipeline& pipeline, uint
 
 void updateTerrainParams(TerrainPipeline& pipeline, const TerrainParamsUBO& params) {
     memcpy(pipeline.uniformMapped, &params, sizeof(TerrainParamsUBO));
+}
+
+void updateTerrainSsaoDescriptor(Device& device, TerrainPipeline& pipeline, VkImageView ssaoView, VkSampler ssaoSampler) {
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView = ssaoView;
+    imageInfo.sampler = ssaoSampler;
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = pipeline.descriptorSet;
+    write.dstBinding = 1;
+    write.dstArrayElement = 0;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.descriptorCount = 1;
+    write.pImageInfo = &imageInfo;
+
+    vkUpdateDescriptorSets(device.device, 1, &write, 0, nullptr);
 }
 

@@ -24,6 +24,8 @@ layout(binding = 0) uniform TerrainParams {
     float _padding[2];
 } terrain;
 
+// SSAO texture (screen-space occlusion)
+layout(binding = 1) uniform sampler2D ssaoTex;
 // Output color
 layout(location = 0) out vec4 outColor;
 
@@ -195,6 +197,13 @@ void main() {
     
     // Calculate lighting
     vec3 litColor = calculateLighting(baseColor, fragNormal, fragWorldPos);
+
+    // Sample SSAO factor in screen space
+    vec2 ssaoSize = vec2(textureSize(ssaoTex, 0));
+    float ao = texture(ssaoTex, gl_FragCoord.xy / ssaoSize).r;
+    // Boost AO visibility
+    ao = pow(ao, 2.0);
+    litColor *= ao;
 
 	// Reflective water from procedural environment sky
 	bool isWater = (fragTerrainType == 0u || fragTerrainType == 1u || fragTerrainType == 14u);
