@@ -236,6 +236,23 @@ void cleanupSwapchain(Device& device, Swapchain& swapchain) {
 void recreateSwapchain(Device& device, VkSurfaceKHR surface, Window& window, Swapchain& swapchain) {
     vkDeviceWaitIdle(device.device);
 
+    // Destroy old synchronization objects before cleanupSwapchain
+    for (size_t i = 0; i < swapchain.imageAvailableSemaphores.size(); i++) {
+        if (swapchain.imageAvailableSemaphores[i] != VK_NULL_HANDLE) {
+            vkDestroySemaphore(device.device, swapchain.imageAvailableSemaphores[i], nullptr);
+        }
+    }
+    for (size_t i = 0; i < swapchain.renderFinishedSemaphores.size(); i++) {
+        if (swapchain.renderFinishedSemaphores[i] != VK_NULL_HANDLE) {
+            vkDestroySemaphore(device.device, swapchain.renderFinishedSemaphores[i], nullptr);
+        }
+    }
+    for (size_t i = 0; i < swapchain.inFlightFences.size(); i++) {
+        if (swapchain.inFlightFences[i] != VK_NULL_HANDLE) {
+            vkDestroyFence(device.device, swapchain.inFlightFences[i], nullptr);
+        }
+    }
+
     cleanupSwapchain(device, swapchain);
 
     // Recreate with old swapchain handle
