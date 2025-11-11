@@ -43,7 +43,9 @@ struct Swapchain {
     // Synchronization
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
-    std::vector<VkFence> inFlightFences;
+    // Timeline synchronization tracking (per frame-in-flight)
+    std::vector<uint64_t> frameTimelineValues;
+    uint64_t nextTimelineValue = 1;
     uint32_t currentFrame = 0;
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 };

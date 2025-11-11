@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <chrono>
+#include <thread>
 
 #include "device.hpp"
 #include "buffer.hpp"
@@ -486,11 +487,30 @@ int main() {
             submitInfo.pCommandBuffers = &cmd;
             
             // Signal renderFinished (indexed by currentImageIndex, for present)
-            VkSemaphore signalSemaphores[] = {swapchain.renderFinishedSemaphores[swapchain.currentImageIndex]};
-            submitInfo.signalSemaphoreCount = 1;
+            uint64_t signalValue = swapchain.nextTimelineValue++;
+            VkSemaphore signalSemaphores[] = {
+                swapchain.renderFinishedSemaphores[swapchain.currentImageIndex],
+                device.timelineSemaphore
+            };
+            submitInfo.signalSemaphoreCount = 2;
             submitInfo.pSignalSemaphores = signalSemaphores;
 
-            if (vkQueueSubmit(device.queue, 1, &submitInfo, swapchain.inFlightFences[swapchain.currentFrame]) != VK_SUCCESS) {
+            VkTimelineSemaphoreSubmitInfo timelineInfo{};
+            timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+            // Provide wait values for all wait semaphores (0 for binary imageAvailable)
+            uint64_t waitValues[1] = {0ull};
+            timelineInfo.waitSemaphoreValueCount = submitInfo.waitSemaphoreCount;
+            timelineInfo.pWaitSemaphoreValues = waitValues;
+            // Provide signal values for all signal semaphores (0 for binary renderFinished, N for timeline)
+            uint64_t signalValues[2] = {0ull, signalValue};
+            timelineInfo.signalSemaphoreValueCount = submitInfo.signalSemaphoreCount;
+            timelineInfo.pSignalSemaphoreValues = signalValues;
+            submitInfo.pNext = &timelineInfo;
+
+            // Track timeline value for this frame-in-flight so we can wait before reuse
+            swapchain.frameTimelineValues[swapchain.currentFrame] = signalValue;
+
+            if (vkQueueSubmit(device.queue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to submit draw command buffer!");
             }
 
@@ -498,6 +518,9 @@ int main() {
             if (!presentImage(device, surface, swapchain)) {
                 framebufferResized = true;
             }
+
+            // Small sleep to reduce CPU spin and coil whine
+            //std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
 
         // Wait for device to finish
@@ -515,11 +538,6 @@ int main() {
         // Destroy renderFinished semaphores (one per swapchain image)
         for (size_t i = 0; i < swapchain.renderFinishedSemaphores.size(); i++) {
             vkDestroySemaphore(device.device, swapchain.renderFinishedSemaphores[i], nullptr);
-        }
-        
-        // Destroy fences (one per frame-in-flight)
-        for (size_t i = 0; i < swapchain.MAX_FRAMES_IN_FLIGHT; i++) {
-            vkDestroyFence(device.device, swapchain.inFlightFences[i], nullptr);
         }
         
         cleanupSwapchain(device, swapchain);
