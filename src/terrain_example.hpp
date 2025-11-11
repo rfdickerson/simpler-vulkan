@@ -132,6 +132,7 @@ public:
     }
     
     Camera& getCamera() { return camera; }
+    float getHexSize() const { return terrainRenderer.getRenderParams().hexSize; }
     
 private:
     Device& device;

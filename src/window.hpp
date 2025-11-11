@@ -13,6 +13,11 @@ struct Window {
     double lastMouseY = 0.0;
     float cameraOffsetX = 0.0f;
     float cameraOffsetY = 0.0f;
+    
+    // Mouse state for left click
+    bool leftMouseClicked = false;
+    double clickX = 0.0;
+    double clickY = 0.0;
 
     void InitGLFW();
     void CreateWindow(int width, int height, const char* title);
@@ -24,4 +29,5 @@ struct Window {
     void onMouseButton(int button, int action, int mods);
     void onMouseMove(double xpos, double ypos);
 	bool consumeCameraPanDelta(float& outDx, float& outDy);
+	bool consumeLeftMouseClick(double& outX, double& outY);
 };

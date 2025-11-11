@@ -62,6 +62,11 @@ void Window::onMouseButton(int button, int action, int mods) {
         } else if (action == GLFW_RELEASE) {
             rightMousePressed = false;
         }
+    } else if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == GLFW_PRESS) {
+            leftMouseClicked = true;
+            glfwGetCursorPos(window, &clickX, &clickY);
+        }
     }
 }
 
@@ -84,4 +89,14 @@ bool Window::consumeCameraPanDelta(float& outDx, float& outDy) {
 	cameraOffsetX = 0.0f;
 	cameraOffsetY = 0.0f;
 	return (outDx != 0.0f || outDy != 0.0f);
+}
+
+bool Window::consumeLeftMouseClick(double& outX, double& outY) {
+	if (leftMouseClicked) {
+		outX = clickX;
+		outY = clickY;
+		leftMouseClicked = false;
+		return true;
+	}
+	return false;
 }

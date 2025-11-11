@@ -17,6 +17,7 @@
 #include "terrain_example.hpp"
 #include <glm/glm.hpp>
 #include "render_graph.hpp"
+#include "hex_coord.hpp"
 
 // Colored vertex structure for the triangle
 struct ColoredVertex {
@@ -297,6 +298,30 @@ int main() {
 					float dxWorld = (-panDX) * sensitivity * rightXZ.x + (-panDY) * sensitivity * forwardXZ.x;
 					float dzWorld = (-panDX) * sensitivity * rightXZ.y + (-panDY) * sensitivity * forwardXZ.y;
 					cam.pan(dxWorld, dzWorld);
+				}
+			}
+
+			// Handle left mouse click to get hex coordinates
+			{
+				double clickX = 0.0, clickY = 0.0;
+				if (window.consumeLeftMouseClick(clickX, clickY)) {
+					Camera& cam = terrainExample->getCamera();
+					
+					// Unproject screen coordinates to world position on ground plane
+					glm::vec3 worldPos = cam.unprojectToPlane(
+						static_cast<float>(clickX),
+						static_cast<float>(clickY),
+						static_cast<float>(swapchain.extent.width),
+						static_cast<float>(swapchain.extent.height),
+						0.0f // Ground plane at y=0
+					);
+					
+					// Convert world position to hex coordinates
+					float hexSize = terrainExample->getHexSize();
+					HexCoord hex = worldToHex(worldPos, hexSize);
+					
+					// Print hex coordinates to console
+					std::cout << "Clicked hex tile: (" << hex.q << ", " << hex.r << ")" << std::endl;
 				}
 			}
 

@@ -2,6 +2,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <cmath>
 
 // 3D camera for the diorama-style view
 class Camera {
@@ -102,6 +103,57 @@ public:
     void focusOn(const glm::vec3& worldPos) {
         target = worldPos;
         updatePosition();
+    }
+    
+    // Unproject screen coordinates to world position on a plane
+    // screenX, screenY: pixel coordinates (0 to width, 0 to height)
+    // screenWidth, screenHeight: window dimensions
+    // planeY: Y coordinate of the plane to intersect (typically 0 for ground)
+    glm::vec3 unprojectToPlane(float screenX, float screenY, float screenWidth, float screenHeight, float planeY = 0.0f) const {
+        // Convert screen coordinates to normalized device coordinates (NDC)
+        // NDC: x in [-1, 1], y in [-1, 1], with origin at center
+        // Screen: x in [0, width], y in [0, height], with origin at top-left
+        float ndcX = (2.0f * screenX / screenWidth) - 1.0f;
+        float ndcY = 1.0f - (2.0f * screenY / screenHeight); // Flip Y axis
+        
+        // Create a point on the near plane in clip space (after perspective divide)
+        // Use z = 0.0 for near plane in NDC (which maps to -near in view space)
+        glm::vec4 clipPos(ndcX, ndcY, 0.0f, 1.0f);
+        
+        // Transform to view space
+        glm::mat4 invProj = glm::inverse(getProjectionMatrix());
+        glm::vec4 viewPos = invProj * clipPos;
+        viewPos /= viewPos.w; // Perspective divide
+        
+        // Transform to world space
+        glm::mat4 invView = glm::inverse(getViewMatrix());
+        glm::vec4 worldPos4 = invView * viewPos;
+        glm::vec3 worldPosNear = glm::vec3(worldPos4);
+        
+        // Create a second point on the far plane to get ray direction
+        glm::vec4 clipPosFar(ndcX, ndcY, 1.0f, 1.0f);
+        glm::vec4 viewPosFar = invProj * clipPosFar;
+        viewPosFar /= viewPosFar.w;
+        glm::vec4 worldPosFar4 = invView * viewPosFar;
+        glm::vec3 worldPosFar = glm::vec3(worldPosFar4);
+        
+        // Calculate ray direction
+        glm::vec3 rayDir = glm::normalize(worldPosFar - worldPosNear);
+        
+        // Calculate intersection with plane at y = planeY
+        // Ray equation: P = origin + t * direction
+        // Plane equation: y = planeY
+        // Solve: worldPosNear.y + t * rayDir.y = planeY
+        // t = (planeY - worldPosNear.y) / rayDir.y
+        if (std::abs(rayDir.y) < 0.0001f) {
+            // Ray is nearly parallel to plane, return a default position
+            return glm::vec3(0.0f, planeY, 0.0f);
+        }
+        
+        float t = (planeY - worldPosNear.y) / rayDir.y;
+        glm::vec3 worldPos = worldPosNear + t * rayDir;
+        
+        return worldPos;
     }
 };
 
