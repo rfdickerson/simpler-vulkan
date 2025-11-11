@@ -9,6 +9,7 @@
 #include "camera.hpp"
 #include "map_builder.hpp"
 #include "ssao_pipeline.hpp"
+#include "tiltshift_pipeline.hpp"
 
 // Example terrain scene setup
 class TerrainExample {
@@ -38,6 +39,9 @@ public:
         // Bind SSAO for terrain and depth for SSAO
         updateTerrainSsaoDescriptor(device, pipeline, swapchain.ssaoImage.view, swapchain.ssaoSampler);
         updateSSAODepthDescriptor(device, ssaoPipeline, swapchain);
+        // Create tilt-shift pipeline and bind scene/depth
+        createTiltShiftPipeline(device, swapchain, tiltPipeline);
+        updateTiltShiftDescriptors(device, tiltPipeline, swapchain);
         
         // Generate trees on grass tiles
         treeRenderer.generateTrees(terrainRenderer);
@@ -49,6 +53,7 @@ public:
         destroyTerrainPipeline(device, pipeline);
         destroyTreePipeline(device, treePipeline);
         destroySSAOPipeline(device, ssaoPipeline);
+        destroyTiltShiftPipeline(device, tiltPipeline);
     }
     
     void initializeSampleTerrain() {
@@ -221,6 +226,43 @@ public:
     void rebindSsaoDescriptors() {
         updateTerrainSsaoDescriptor(device, pipeline, swapchain.ssaoImage.view, swapchain.ssaoSampler);
         updateSSAODepthDescriptor(device, ssaoPipeline, swapchain);
+        updateTiltShiftDescriptors(device, tiltPipeline, swapchain);
+    }
+
+    void renderTiltShift(VkCommandBuffer cmd) {
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(swapchain.extent.width);
+        viewport.height = static_cast<float>(swapchain.extent.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = swapchain.extent;
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, tiltPipeline.pipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, tiltPipeline.pipelineLayout, 0, 1, &tiltPipeline.descriptorSet, 0, nullptr);
+
+        // Miniature/diorama look parameters (tilt-shift effect)
+        float angleDeg = 0.0f; // horizontal band (try 5-15 for diagonal tilt)
+        float angleRad = angleDeg * 0.017453292519943295f;
+        TiltShiftPushConstants pc{};
+        pc.cosAngle = cosf(angleRad);
+        pc.sinAngle = sinf(angleRad);
+        pc.focusCenter = 0.5f;       // center of screen in focus (0.4-0.6 recommended)
+        pc.bandHalfWidth = 0.18f;    // sharp band width (0.15-0.25 for subtle)
+        pc.blurScale = 0.10f;        // blur falloff rate (0.08-0.15)
+        pc.maxRadiusPixels = 18.0f;  // max blur radius (12-25 pixels)
+        pc.resolution[0] = static_cast<float>(swapchain.extent.width);
+        pc.resolution[1] = static_cast<float>(swapchain.extent.height);
+        pc.padding = 0.0f;
+
+        vkCmdPushConstants(cmd, tiltPipeline.pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(TiltShiftPushConstants), &pc);
+        vkCmdDraw(cmd, 3, 1, 0, 0);
     }
     
     Camera& getCamera() { return camera; }
@@ -234,6 +276,7 @@ private:
     TerrainPipeline pipeline;
     TreePipeline treePipeline;
     SSAOPipeline ssaoPipeline;
+    TiltShiftPipeline tiltPipeline;
     Camera camera;
     float elapsedTime = 0.0f;
 };

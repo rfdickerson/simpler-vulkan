@@ -34,6 +34,9 @@ struct Swapchain {
 
     // Single-sample depth resolved for SSAO sampling
     Image depthResolved;
+
+    // Single-sample scene color for post-processing source
+    Image sceneColor;
     
     uint32_t currentImageIndex = 0;
     

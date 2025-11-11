@@ -172,6 +172,13 @@ void createSwapchain(Device& device, VkSurfaceKHR surface, Window& window, Swapc
                                       1, VK_SAMPLE_COUNT_1_BIT);
     createImageView(device, swapchain.ssaoImage, VK_IMAGE_ASPECT_COLOR_BIT);
 
+    // Create scene color (single-sample) for post-processing
+    swapchain.sceneColor = createImage(device, extent.width, extent.height, swapchain.format,
+                                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                                       VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                                       1, VK_SAMPLE_COUNT_1_BIT);
+    createImageView(device, swapchain.sceneColor, VK_IMAGE_ASPECT_COLOR_BIT);
+
     // Create resolved depth (single-sample) for SSAO sampling
     swapchain.depthResolved = createImage(device, extent.width, extent.height, swapchain.depthFormat,
                                           VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
@@ -254,6 +261,12 @@ void cleanupSwapchain(Device& device, Swapchain& swapchain) {
     if (swapchain.depthResolved.image != VK_NULL_HANDLE) {
         destroyImage(device, swapchain.depthResolved);
         swapchain.depthResolved = {};
+    }
+
+    // Destroy scene color
+    if (swapchain.sceneColor.image != VK_NULL_HANDLE) {
+        destroyImage(device, swapchain.sceneColor);
+        swapchain.sceneColor = {};
     }
 
     // Destroy SSAO target and sampler

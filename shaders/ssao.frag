@@ -33,7 +33,8 @@ float hash(vec2 p) {
 
 // Reconstruct view-space position from depth
 vec3 getViewPosition(vec2 uv, float depth) {
-    vec4 clipPos = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    // Vulkan NDC: x,y in [-1,1], z in [0,1]
+    vec4 clipPos = vec4(uv * 2.0 - 1.0, depth, 1.0);
     vec4 viewPos = pc.invProj * clipPos;
     return viewPos.xyz / viewPos.w;
 }

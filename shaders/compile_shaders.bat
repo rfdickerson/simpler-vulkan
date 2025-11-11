@@ -79,5 +79,17 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
+glslc tiltshift.vert -o tiltshift.vert.spv
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to compile tiltshift.vert
+    exit /b 1
+)
+
+glslc tiltshift.frag -o tiltshift.frag.spv
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to compile tiltshift.frag
+    exit /b 1
+)
+
 echo All shaders compiled successfully!
 

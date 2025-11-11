@@ -410,7 +410,7 @@ int main() {
 
             graph.addPass(ssaoPass);
 
-            // Main pass - color + depth (load depth from prepass)
+            // Main pass - color + depth (load depth from prepass); render into sceneColor for post
             RenderAttachment att{};
             att.extent = swapchain.extent;
             att.samples = swapchain.msaaSamples;
@@ -419,11 +419,11 @@ int main() {
             if (swapchain.msaaSamples != VK_SAMPLE_COUNT_1_BIT) {
                 att.colorView = swapchain.msaaColor.view;
                 att.colorImage = swapchain.msaaColor.image;
-                att.resolveView = swapchain.images[swapchain.currentImageIndex].view;
-                att.resolveImage = swapchain.images[swapchain.currentImageIndex].image;
+                att.resolveView = swapchain.sceneColor.view;
+                att.resolveImage = swapchain.sceneColor.image;
             } else {
-                att.colorView = swapchain.images[swapchain.currentImageIndex].view;
-                att.colorImage = swapchain.images[swapchain.currentImageIndex].image;
+                att.colorView = swapchain.sceneColor.view;
+                att.colorImage = swapchain.sceneColor.image;
             }
             att.depthView = swapchain.depthImage.view;
             att.depthImage = swapchain.depthImage.image;
@@ -442,6 +442,31 @@ int main() {
             };
 
             graph.addPass(pass);
+
+            // Tilt-shift post-process: write to swapchain, sample sceneColor and depthResolved
+            RenderAttachment tiltAtt{};
+            tiltAtt.extent = swapchain.extent;
+            tiltAtt.samples = VK_SAMPLE_COUNT_1_BIT;
+            tiltAtt.colorFormat = swapchain.format;
+            tiltAtt.colorView = swapchain.images[swapchain.currentImageIndex].view;
+            tiltAtt.colorImage = swapchain.images[swapchain.currentImageIndex].image;
+            // Include resolved depth as read-only to manage layout for sampling
+            tiltAtt.depthFormat = swapchain.depthFormat;
+            tiltAtt.depthView = swapchain.depthResolved.view;
+            tiltAtt.depthImage = swapchain.depthResolved.image;
+
+            RenderPassDesc tiltPass{};
+            tiltPass.name = "tiltshift";
+            tiltPass.attachments = tiltAtt;
+            tiltPass.depthLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+            tiltPass.depthReadOnly = true;
+            // Ensure sceneColor transitions to sampled for this pass
+            tiltPass.sampledImages.push_back(swapchain.sceneColor.image);
+            tiltPass.record = [&](VkCommandBuffer c) {
+                terrainExample->renderTiltShift(c);
+            };
+
+            graph.addPass(tiltPass);
             graph.execute();
             graph.endFrame();
 
