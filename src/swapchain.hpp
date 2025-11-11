@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.h>
 #include <vector>
+#include "image.hpp"
 
 struct Device;
 struct Window;
@@ -16,6 +17,11 @@ struct Swapchain {
     VkFormat format;
     VkExtent2D extent;
     std::vector<SwapchainImage> images;
+
+    // MSAA color target
+    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+    Image msaaColor;
+    bool msaaNeedsTransition = false;
     
     uint32_t currentImageIndex = 0;
     

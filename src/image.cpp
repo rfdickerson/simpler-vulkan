@@ -6,7 +6,7 @@
 #include <iostream>
 
 Image createImage(Device& device, uint32_t width, uint32_t height, VkFormat format,
-                  VkImageUsageFlags usage, VmaMemoryUsage memoryUsage, uint32_t mipLevels) {
+                  VkImageUsageFlags usage, VmaMemoryUsage memoryUsage, uint32_t mipLevels, VkSampleCountFlagBits samples) {
     Image img{};
     img.width = width;
     img.height = height;
@@ -26,7 +26,7 @@ Image createImage(Device& device, uint32_t width, uint32_t height, VkFormat form
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = usage;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.samples = samples;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     VmaAllocationCreateInfo allocInfo{};

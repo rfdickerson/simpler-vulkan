@@ -1,6 +1,7 @@
 #include "swapchain.hpp"
 #include "device.hpp"
 #include "window.hpp"
+#include "image.hpp"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -55,6 +56,17 @@ static VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities,
 
         return actualExtent;
     }
+}
+
+static VkSampleCountFlagBits chooseMsaaSamples(VkPhysicalDevice physicalDevice, VkSampleCountFlagBits desired) {
+    VkPhysicalDeviceProperties props;
+    vkGetPhysicalDeviceProperties(physicalDevice, &props);
+    VkSampleCountFlags colorCounts = props.limits.framebufferColorSampleCounts;
+    // Prefer desired, otherwise fall back
+    if (colorCounts & desired) return desired;
+    if (colorCounts & VK_SAMPLE_COUNT_4_BIT) return VK_SAMPLE_COUNT_4_BIT;
+    if (colorCounts & VK_SAMPLE_COUNT_2_BIT) return VK_SAMPLE_COUNT_2_BIT;
+    return VK_SAMPLE_COUNT_1_BIT;
 }
 
 void createSwapchain(Device& device, VkSurfaceKHR surface, Window& window, Swapchain& swapchain) {
@@ -134,6 +146,18 @@ void createSwapchain(Device& device, VkSurfaceKHR surface, Window& window, Swapc
         }
     }
 
+    // MSAA setup: create a single transient color image with 4x if supported
+    swapchain.msaaSamples = chooseMsaaSamples(device.physicalDevice, VK_SAMPLE_COUNT_4_BIT);
+    if (swapchain.msaaSamples != VK_SAMPLE_COUNT_1_BIT) {
+        swapchain.msaaColor = createImage(device, extent.width, extent.height, swapchain.format,
+                                          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                          VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                                          1, swapchain.msaaSamples);
+        createImageView(device, swapchain.msaaColor, VK_IMAGE_ASPECT_COLOR_BIT);
+    } else {
+        swapchain.msaaColor = {}; // zero-init
+    }
+
     // Create synchronization objects
     // imageAvailable: one per frame-in-flight (we don't know which image we'll get before acquire)
     swapchain.imageAvailableSemaphores.resize(Swapchain::MAX_FRAMES_IN_FLIGHT);
@@ -175,6 +199,11 @@ void createSwapchain(Device& device, VkSurfaceKHR surface, Window& window, Swapc
 }
 
 void cleanupSwapchain(Device& device, Swapchain& swapchain) {
+    // Destroy MSAA color target if present
+    if (swapchain.msaaColor.image != VK_NULL_HANDLE) {
+        destroyImage(device, swapchain.msaaColor);
+        swapchain.msaaColor = {};
+    }
     for (auto& img : swapchain.images) {
         if (img.view != VK_NULL_HANDLE) {
             vkDestroyImageView(device.device, img.view, nullptr);

@@ -64,7 +64,9 @@ void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.rasterizationSamples = (swapchain.msaaSamples != VK_SAMPLE_COUNT_1_BIT)
+        ? swapchain.msaaSamples
+        : VK_SAMPLE_COUNT_1_BIT;
 
     // Blending (opaque rendering for now)
     VkPipelineColorBlendAttachmentState colorBlendAttachment{};
