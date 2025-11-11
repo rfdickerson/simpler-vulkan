@@ -24,25 +24,65 @@ void TerrainRenderer::initializeRectangularGrid(int width, int height) {
     tiles.clear();
     tileOrder.clear();
     
-    // Generate hexes in a rectangular pattern
-    for (int r = 0; r < height; ++r) {
-        int rOffset = r / 2;
-        for (int q = -rOffset; q < width - rOffset; ++q) {
+    // Flat-top "odd-q" offset rectangle mapped to axial coordinates
+    // offset (col, row) -> axial: q = col, r = row - floor(col/2)
+    for (int col = 0; col < width; ++col) {
+        int q = col;
+        int qOffset = col / 2; // floor for ints
+        for (int row = 0; row < height; ++row) {
+            int r = row - qOffset;
             HexCoord hex(q, r);
             tileOrder.push_back(hex);
-            
+
             TerrainTile tile;
             tile.type = TerrainType::Grassland; // Default terrain
             tile.height = 0.0f;
             tile.explored = 255; // Fully explored for now
             tile.visible = 255;
-            
+
             tiles[hex] = tile;
         }
     }
     
     meshDirty = true;
     std::cout << "Initialized rectangular grid: " << width << "x" << height 
+              << " (" << tiles.size() << " tiles)" << std::endl;
+}
+
+void TerrainRenderer::initializeSimpleBiomeMap(int width, int height) {
+    tiles.clear();
+    tileOrder.clear();
+
+    // Build flat-top "odd-q" rectangle and assign simple biomes by row bands:
+    // top band = Ocean, middle = Grassland, bottom = Desert
+    for (int col = 0; col < width; ++col) {
+        int q = col;
+        int qOffset = col / 2;
+        for (int row = 0; row < height; ++row) {
+            int r = row - qOffset;
+            HexCoord hex(q, r);
+            tileOrder.push_back(hex);
+
+            float t = (height > 1) ? (static_cast<float>(row) / static_cast<float>(height - 1)) : 0.0f;
+
+            TerrainTile tile;
+            if (t < 0.33f) {
+                tile.type = TerrainType::Ocean;
+            } else if (t < 0.66f) {
+                tile.type = TerrainType::Grassland;
+            } else {
+                tile.type = TerrainType::Desert;
+            }
+
+            tile.height = 0.0f;
+            tile.explored = 255;
+            tile.visible = 255;
+            tiles[hex] = tile;
+        }
+    }
+
+    meshDirty = true;
+    std::cout << "Initialized simple biome map: " << width << "x" << height
               << " (" << tiles.size() << " tiles)" << std::endl;
 }
 

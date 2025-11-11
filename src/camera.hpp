@@ -54,7 +54,10 @@ public:
     
     // Get projection matrix
     glm::mat4 getProjectionMatrix() const {
-        return glm::perspective(glm::radians(fov), aspectRatio, nearPlane, farPlane);
+        glm::mat4 proj = glm::perspective(glm::radians(fov), aspectRatio, nearPlane, farPlane);
+        // Vulkan's clip space has inverted Y compared to GL's default. Flip it here.
+        proj[1][1] *= -1.0f;
+        return proj;
     }
     
     // Get combined view-projection matrix

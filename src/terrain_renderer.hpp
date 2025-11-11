@@ -19,6 +19,8 @@ public:
     
     // Initialize terrain with a specific pattern
     void initializeRectangularGrid(int width, int height);
+    // Flat-top hex "odd-q" rectangle with simple biomes (water/grass/desert)
+    void initializeSimpleBiomeMap(int width, int height);
     void initializeRadialGrid(const HexCoord& center, int radius);
     
     // Set terrain type for a specific hex

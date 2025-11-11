@@ -120,10 +120,12 @@ public:
     static HexMesh generateRectangularGrid(int width, int height, float hexSize) {
         std::vector<HexCoord> hexes;
         
-        // Generate hexes in a rectangular pattern (pointy-top)
-        for (int r = 0; r < height; ++r) {
-            int rOffset = r / 2; // Offset for odd rows
-            for (int q = -rOffset; q < width - rOffset; ++q) {
+        // Flat-top "odd-q" offset rectangle mapped to axial
+        for (int col = 0; col < width; ++col) {
+            int q = col;
+            int qOffset = col / 2;
+            for (int row = 0; row < height; ++row) {
+                int r = row - qOffset;
                 hexes.push_back(HexCoord(q, r));
             }
         }

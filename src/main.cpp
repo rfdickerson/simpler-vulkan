@@ -290,8 +290,8 @@ int main() {
 					glm::vec2 rightXZ = glm::vec2(forwardXZ.y, -forwardXZ.x);
 
 					float sensitivity = 0.0025f * cam.orbitRadius;
-					float dxWorld = (-panDX) * sensitivity * rightXZ.x + (panDY) * sensitivity * forwardXZ.x;
-					float dzWorld = (-panDX) * sensitivity * rightXZ.y + (panDY) * sensitivity * forwardXZ.y;
+					float dxWorld = (-panDX) * sensitivity * rightXZ.x + (-panDY) * sensitivity * forwardXZ.x;
+					float dzWorld = (-panDX) * sensitivity * rightXZ.y + (-panDY) * sensitivity * forwardXZ.y;
 					cam.pan(dxWorld, dzWorld);
 				}
 			}

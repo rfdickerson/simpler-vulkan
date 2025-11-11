@@ -37,18 +37,8 @@ public:
     }
     
     void initializeSampleTerrain() {
-        // Create a small radial grid for testing
-        terrainRenderer.initializeRadialGrid(HexCoord(0, 0), 8);
-        
-        // Add some variety
-        terrainRenderer.setTerrainType(HexCoord(0, 0), TerrainType::Plains);
-        terrainRenderer.setTerrainType(HexCoord(2, 0), TerrainType::Hills);
-        terrainRenderer.setTerrainHeight(HexCoord(2, 0), 0.5f);
-        terrainRenderer.setTerrainType(HexCoord(-2, 2), TerrainType::Forest);
-        terrainRenderer.setTerrainType(HexCoord(1, -2), TerrainType::Mountains);
-        terrainRenderer.setTerrainHeight(HexCoord(1, -2), 1.0f);
-        
-        // Build the mesh
+        // Create a simple water/grass/desert map on a flat-top odd-q rectangle
+        terrainRenderer.initializeSimpleBiomeMap(40, 24);
         terrainRenderer.rebuildMesh();
     }
     
