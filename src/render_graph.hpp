@@ -37,6 +37,7 @@ public:
     void addPass(const RenderPassDesc& pass);
     void execute();
     void endFrame();
+    void resetLayoutTracking(); // Call when swapchain is recreated
 
 private:
     Device* device{nullptr};

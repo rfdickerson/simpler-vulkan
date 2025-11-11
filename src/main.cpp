@@ -267,6 +267,9 @@ int main() {
 
         std::cout << "Terrain scene ready to render..." << std::endl;
 
+        // Create persistent render graph to track image layouts across frames
+        RenderGraph graph;
+
         bool framebufferResized = false;
         
         // Time tracking for deltaTime
@@ -300,6 +303,7 @@ int main() {
             // Handle window resize
             if (framebufferResized) {
                 recreateSwapchain(device, surface, window, swapchain);
+                graph.resetLayoutTracking(); // Clear layout tracking for new swapchain images
                 terrainExample->getCamera().setAspectRatio(
                     static_cast<float>(swapchain.extent.width) / 
                     static_cast<float>(swapchain.extent.height));
@@ -312,6 +316,7 @@ int main() {
             // Acquire next image
             if (!acquireNextImage(device, swapchain)) {
                 recreateSwapchain(device, surface, window, swapchain);
+                graph.resetLayoutTracking(); // Clear layout tracking for new swapchain images
                 terrainExample->getCamera().setAspectRatio(
                     static_cast<float>(swapchain.extent.width) / 
                     static_cast<float>(swapchain.extent.height));
@@ -326,7 +331,6 @@ int main() {
             cmdBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
             vkBeginCommandBuffer(cmd, &cmdBeginInfo);
 
-            RenderGraph graph;
             graph.beginFrame(device, swapchain, cmd);
 
             RenderAttachment att{};

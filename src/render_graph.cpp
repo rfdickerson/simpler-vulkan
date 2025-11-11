@@ -5,12 +5,12 @@ void RenderGraph::beginFrame(Device& inDevice, Swapchain& inSwapchain, VkCommand
     swapchain = &inSwapchain;
     cmd = inCmd;
     passes.clear();
-    // Initialize known layouts for swapchain images on first use
-    if (swapchain && imageLayouts.empty()) {
-        for (const auto& scImg : swapchain->images) {
-            imageLayouts[scImg.image] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        }
-    }
+}
+
+void RenderGraph::resetLayoutTracking() {
+    imageLayouts.clear();
+    lastMsaaImage = VK_NULL_HANDLE;
+    lastDepthImage = VK_NULL_HANDLE;
 }
 
 void RenderGraph::addPass(const RenderPassDesc& pass) {
@@ -32,22 +32,19 @@ void RenderGraph::execute() {
             b.srcAccessMask = 0;
             b.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
             b.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-            // Use known old layout if tracked; otherwise assume PRESENT for swapchain images, UNDEFINED for others
+            // Use known old layout if tracked; otherwise assume UNDEFINED (first use or after recreate)
             VkImage oldImg = pass.attachments.colorImage;
             VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             auto it = imageLayouts.find(oldImg);
             if (it != imageLayouts.end()) {
                 oldLayout = it->second;
-            } else if (swapchain) {
-                for (const auto& scImg : swapchain->images) {
-                    if (scImg.image == oldImg) {
-                        oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; // first acquire -> undefined
-                        break;
-                    }
-                }
             }
             b.oldLayout = oldLayout;
             b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            // If transitioning from PRESENT, use BOTTOM_OF_PIPE as source stage
+            if (oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+                b.srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+            }
             b.image = pass.attachments.colorImage;
             b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             b.subresourceRange.baseMipLevel = 0;
@@ -70,17 +67,13 @@ void RenderGraph::execute() {
             auto it = imageLayouts.find(oldImg);
             if (it != imageLayouts.end()) {
                 oldLayout = it->second;
-            } else if (swapchain) {
-                // Resolve is typically a swapchain image; assume PRESENT if unseen
-                for (const auto& scImg : swapchain->images) {
-                    if (scImg.image == oldImg) {
-                        oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; // first acquire -> undefined
-                        break;
-                    }
-                }
             }
             b.oldLayout = oldLayout;
             b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            // If transitioning from PRESENT, use BOTTOM_OF_PIPE as source stage
+            if (oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+                b.srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+            }
             b.image = pass.attachments.resolveImage;
             b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             b.subresourceRange.baseMipLevel = 0;
@@ -176,11 +169,9 @@ void RenderGraph::endFrame() {
     if (!swapchain || swapchain->images.empty()) return;
 
     VkImage presentImage = swapchain->images[swapchain->currentImageIndex].image;
+    // The image should be in COLOR_ATTACHMENT_OPTIMAL after rendering
+    // (we set it in execute() after the barrier)
     VkImageLayout currentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    auto it = imageLayouts.find(presentImage);
-    if (it != imageLayouts.end()) {
-        currentLayout = it->second;
-    }
 
     VkImageMemoryBarrier2 presentBarrier{};
     presentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
@@ -203,7 +194,9 @@ void RenderGraph::endFrame() {
     dep.pImageMemoryBarriers = &presentBarrier;
     vkCmdPipelineBarrier2(cmd, &dep);
 
-    imageLayouts[presentImage] = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    // Don't track PRESENT layout - after presenting, driver may reset to UNDEFINED
+    // Remove from map so next frame assumes UNDEFINED (safe transition)
+    imageLayouts.erase(presentImage);
 }
 
 
