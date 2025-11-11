@@ -98,6 +98,15 @@ public:
     void setAspectRatio(float aspect) {
         aspectRatio = aspect;
     }
+
+    // Reset camera to defaults (keeps current aspect and fov)
+    void reset() {
+        target = glm::vec3(0.0f, 0.0f, 0.0f);
+        tiltAngle = 60.0f;
+        orbitRadius = 15.0f;
+        orbitAngle = 45.0f;
+        updatePosition();
+    }
     
     // Focus on a specific world position
     void focusOn(const glm::vec3& worldPos) {

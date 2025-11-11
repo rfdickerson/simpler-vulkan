@@ -286,7 +286,7 @@ int main() {
             float deltaTime = std::chrono::duration<float>(currentFrameTime - lastFrameTime).count();
             lastFrameTime = currentFrameTime;
 
-			// Apply camera panning from right-mouse drag
+			// Apply camera panning from middle-mouse drag
 			{
 				float panDX = 0.0f, panDY = 0.0f;
 				if (window.consumeCameraPanDelta(panDX, panDY)) {
@@ -301,6 +301,54 @@ int main() {
 					cam.pan(dxWorld, dzWorld);
 				}
 			}
+
+            // Apply camera zoom or rotate via scroll (Alt + Scroll to rotate)
+            {
+                float scrollX = 0.0f, scrollY = 0.0f;
+                if (window.consumeScrollDelta(scrollX, scrollY)) {
+                    Camera& cam = terrainExample->getCamera();
+                    bool altDown = window.isKeyDown(GLFW_KEY_LEFT_ALT) || window.isKeyDown(GLFW_KEY_RIGHT_ALT);
+                    if (altDown) {
+                        float rotateSensitivityDeg = 5.0f;
+                        cam.rotate(-scrollY * rotateSensitivityDeg);
+                    } else {
+                        float zoomSensitivity = 1.0f;
+                        cam.zoom(-scrollY * zoomSensitivity);
+                    }
+                }
+            }
+
+            // Apply camera panning via WASD
+            {
+                int moveForward = window.isKeyDown(GLFW_KEY_W) ? 1 : 0;
+                int moveBackward = window.isKeyDown(GLFW_KEY_S) ? 1 : 0;
+                int moveLeft = window.isKeyDown(GLFW_KEY_A) ? 1 : 0;
+                int moveRight = window.isKeyDown(GLFW_KEY_D) ? 1 : 0;
+
+                int forwardAxis = moveForward - moveBackward;
+                int strafeAxis = moveRight - moveLeft;
+
+                if (forwardAxis != 0 || strafeAxis != 0) {
+                    Camera& cam = terrainExample->getCamera();
+                    glm::vec3 viewDir = glm::normalize(cam.target - cam.position);
+                    glm::vec2 forwardXZ = glm::normalize(glm::vec2(viewDir.x, viewDir.z));
+                    glm::vec2 rightXZ = glm::vec2(forwardXZ.y, -forwardXZ.x);
+
+                    float baseSpeed = 5.0f;
+                    float speed = baseSpeed * deltaTime * glm::max(cam.orbitRadius * 0.1f, 1.0f);
+
+                    float dxWorld = (strafeAxis * rightXZ.x + forwardAxis * forwardXZ.x) * speed;
+                    float dzWorld = (strafeAxis * rightXZ.y + forwardAxis * forwardXZ.y) * speed;
+                    cam.pan(dxWorld, dzWorld);
+                }
+            }
+
+            // Reset camera with Home key
+            {
+                if (window.isKeyDown(GLFW_KEY_HOME)) {
+                    terrainExample->getCamera().reset();
+                }
+            }
 
 			// Handle left mouse click to get hex coordinates
 			{

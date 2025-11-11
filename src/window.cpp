@@ -26,6 +26,12 @@ void Window::CreateWindow(int width, int height, const char* title) {
         app->onMouseButton(button, action, mods);
     });
 
+    // scroll callback
+    glfwSetScrollCallback(window, [](GLFWwindow* window, double xoffset, double yoffset) {
+        auto app = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        app->onScroll(xoffset, yoffset);
+    });
+
     // cursor position callback
     glfwSetCursorPosCallback(window, [](GLFWwindow* window, double xpos, double ypos) {
         auto app = static_cast<Window*>(glfwGetWindowUserPointer(window));
@@ -55,12 +61,12 @@ void Window::cleanup() const {
 }
 
 void Window::onMouseButton(int button, int action, int mods) {
-    if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
         if (action == GLFW_PRESS) {
-            rightMousePressed = true;
+            middleMousePressed = true;
             glfwGetCursorPos(window, &lastMouseX, &lastMouseY);
         } else if (action == GLFW_RELEASE) {
-            rightMousePressed = false;
+            middleMousePressed = false;
         }
     } else if (button == GLFW_MOUSE_BUTTON_LEFT) {
         if (action == GLFW_PRESS) {
@@ -71,7 +77,7 @@ void Window::onMouseButton(int button, int action, int mods) {
 }
 
 void Window::onMouseMove(double xpos, double ypos) {
-    if (rightMousePressed) {
+    if (middleMousePressed) {
         double deltaX = xpos - lastMouseX;
         double deltaY = ypos - lastMouseY;
         
@@ -81,6 +87,11 @@ void Window::onMouseMove(double xpos, double ypos) {
         lastMouseX = xpos;
         lastMouseY = ypos;
     }
+}
+
+void Window::onScroll(double xoffset, double yoffset) {
+    scrollX += static_cast<float>(xoffset);
+    scrollY += static_cast<float>(yoffset);
 }
 
 bool Window::consumeCameraPanDelta(float& outDx, float& outDy) {
@@ -99,4 +110,16 @@ bool Window::consumeLeftMouseClick(double& outX, double& outY) {
 		return true;
 	}
 	return false;
+}
+
+bool Window::consumeScrollDelta(float& outX, float& outY) {
+    outX = scrollX;
+    outY = scrollY;
+    scrollX = 0.0f;
+    scrollY = 0.0f;
+    return (outX != 0.0f || outY != 0.0f);
+}
+
+bool Window::isKeyDown(int key) const {
+    return glfwGetKey(window, key) == GLFW_PRESS;
 }

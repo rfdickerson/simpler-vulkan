@@ -8,11 +8,15 @@ struct Window {
     int         height;
 
     // Mouse state for camera panning
-    bool rightMousePressed = false;
+    bool middleMousePressed = false;
     double lastMouseX = 0.0;
     double lastMouseY = 0.0;
     float cameraOffsetX = 0.0f;
     float cameraOffsetY = 0.0f;
+
+    // Scroll state
+    float scrollX = 0.0f;
+    float scrollY = 0.0f;
     
     // Mouse state for left click
     bool leftMouseClicked = false;
@@ -28,6 +32,9 @@ struct Window {
     
     void onMouseButton(int button, int action, int mods);
     void onMouseMove(double xpos, double ypos);
+    void onScroll(double xoffset, double yoffset);
 	bool consumeCameraPanDelta(float& outDx, float& outDy);
 	bool consumeLeftMouseClick(double& outX, double& outY);
+    bool consumeScrollDelta(float& outX, float& outY);
+    bool isKeyDown(int key) const;
 };
