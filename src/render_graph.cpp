@@ -214,10 +214,10 @@ void RenderGraph::execute() {
             pColorAttachment = &colorAttachment;
         }
 
-        // Depth attachment
+        // Depth attachment (only include when writing/reading as attachment)
         VkRenderingAttachmentInfo depthAttachment{};
         VkRenderingAttachmentInfo* pDepthAttachment = nullptr;
-        if (pass.attachments.depthView != VK_NULL_HANDLE) {
+        if (pass.attachments.depthView != VK_NULL_HANDLE && !pass.depthReadOnly) {
             depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             depthAttachment.imageView = pass.attachments.depthView;
             depthAttachment.imageLayout = pass.depthReadOnly
