@@ -121,6 +121,34 @@ void TerrainRenderer::initializeRadialGrid(const HexCoord& center, int radius) {
               << " (" << tiles.size() << " tiles)" << std::endl;
 }
 
+void TerrainRenderer::initializeEmptyGrid(int width, int height) {
+    tiles.clear();
+    tileOrder.clear();
+    
+    // Flat-top "odd-q" offset rectangle mapped to axial coordinates
+    for (int col = 0; col < width; ++col) {
+        int q = col;
+        int qOffset = col / 2;
+        for (int row = 0; row < height; ++row) {
+            int r = row - qOffset;
+            HexCoord hex(q, r);
+            tileOrder.push_back(hex);
+
+            TerrainTile tile;
+            tile.type = TerrainType::Ocean; // Default to ocean
+            tile.height = 0.0f;
+            tile.explored = 255;
+            tile.visible = 255;
+
+            tiles[hex] = tile;
+        }
+    }
+    
+    meshDirty = true;
+    std::cout << "Initialized empty grid: " << width << "x" << height 
+              << " (" << tiles.size() << " tiles)" << std::endl;
+}
+
 void TerrainRenderer::setTerrainType(const HexCoord& hex, TerrainType type) {
     auto it = tiles.find(hex);
     if (it != tiles.end()) {

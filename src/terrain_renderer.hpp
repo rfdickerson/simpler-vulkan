@@ -22,6 +22,8 @@ public:
     // Flat-top hex "odd-q" rectangle with simple biomes (water/grass/desert)
     void initializeSimpleBiomeMap(int width, int height);
     void initializeRadialGrid(const HexCoord& center, int radius);
+    // Initialize empty grid for external map builders
+    void initializeEmptyGrid(int width, int height);
     
     // Set terrain type for a specific hex
     void setTerrainType(const HexCoord& hex, TerrainType type);

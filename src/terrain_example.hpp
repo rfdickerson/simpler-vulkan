@@ -7,6 +7,7 @@
 #include "tree_renderer.hpp"
 #include "tree_pipeline.hpp"
 #include "camera.hpp"
+#include "map_builder.hpp"
 
 // Example terrain scene setup
 class TerrainExample {
@@ -45,9 +46,21 @@ public:
     }
     
     void initializeSampleTerrain() {
-        // Create a simple water/grass/desert map on a flat-top odd-q rectangle
-        terrainRenderer.initializeSimpleBiomeMap(40, 24);
-        terrainRenderer.rebuildMesh();
+        // Generate realistic terrain using MapBuilder
+        MapConfig config;
+        config.width = 40;
+        config.height = 24;
+        config.seed = 42;  // Fixed seed for consistent starting map
+        config.waterLevel = 0.42f;
+        config.mountainLevel = 0.72f;
+        config.hillLevel = 0.58f;
+        config.octaves = 5;
+        config.frequency = 0.06f;  // Slightly lower for larger continents
+        config.persistence = 0.52f;
+        config.useMoistureMap = true;
+        config.moistureFrequency = 0.10f;
+        
+        MapBuilder::generateMap(terrainRenderer, config);
     }
     
     void update(float deltaTime) {
