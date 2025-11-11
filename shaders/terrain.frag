@@ -81,10 +81,10 @@ vec3 getTerrainColor(uint terrainType, vec2 hexCoord) {
     
     switch(terrainType) {
         case 0: // Ocean
-            baseColor = vec3(0.25, 0.75, 0.85); // Mediterranean turquoise
+			baseColor = vec3(0.18, 0.86, 0.96); // Brighter Mediterranean turquoise
             break;
         case 1: // CoastalWater
-            baseColor = vec3(0.3, 0.8, 0.9); // Lighter Mediterranean turquoise
+			baseColor = vec3(0.30, 0.93, 1.00); // Bright shallow Mediterranean
             break;
         case 2: // Grassland
             baseColor = vec3(0.4, 0.6, 0.2);
@@ -123,7 +123,7 @@ vec3 getTerrainColor(uint terrainType, vec2 hexCoord) {
             baseColor = vec3(0.9, 0.95, 1.0);
             break;
         case 14: // River
-            baseColor = vec3(0.28, 0.75, 0.88); // Turquoise river
+			baseColor = vec3(0.20, 0.88, 0.98); // Bright turquoise river
             break;
         case 15: // NaturalWonder
             baseColor = vec3(0.8, 0.6, 1.0);
@@ -257,23 +257,23 @@ void main() {
 
 		// Turquoise transmission color with absorption (red is absorbed most in water)
 		vec3 waterColor = baseColor;
-		vec3 absorption = vec3(2.2, 0.35, 0.05);
+		vec3 absorption = vec3(1.8, 0.25, 0.04);
 		float viewDepth = pow(1.0 - NdotV, 1.2) * 2.0; // cheap thickness approximation
 		vec3 transmittance = exp(-absorption * viewDepth);
-		float shallowBoost = 0.35 + 0.35 * clamp(Np.y, 0.0, 1.0);
+		float shallowBoost = 0.50 + 0.50 * clamp(Np.y, 0.0, 1.0);
 		vec3 transmission = waterColor * transmittance * shallowBoost * terrain.ambientIntensity;
 		
 		// Specular highlight from direct sun (non-metallic, roughness-controlled)
 		vec3 L = normalize(-terrain.sunDirection);
 		float shininess = mix(24.0, 96.0, 1.0 - roughness);
 		float specular = pow(max(dot(reflect(-L, Np), V), 0.0), shininess);
-		vec3 sunSpec = terrain.sunColor * specular * 0.15;
+		vec3 sunSpec = terrain.sunColor * specular * 0.20;
 
 		// Slightly tint and soften environment reflection
-		env = mix(env, waterColor, 0.15 * roughness) * 0.9;
+		env = mix(env, waterColor, 0.25 * roughness);
 
 		// Blend reflection with transmission using moderated Fresnel
-		litColor = mix(transmission + sunSpec, env, clamp(reflectionStrength, 0.0, 0.9));
+		litColor = mix(transmission + sunSpec, env, clamp(reflectionStrength, 0.0, 0.8));
 	}
     
 	// Compute precise hex-edge factor using SDF in local hex coordinates
