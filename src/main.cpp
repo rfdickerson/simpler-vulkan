@@ -326,7 +326,7 @@ int main() {
             vkBeginCommandBuffer(cmd, &cmdBeginInfo);
 
             // Transition swapchain image to color attachment
-            VkImageMemoryBarrier2 barriers[2]{};
+            VkImageMemoryBarrier2 barriers[3]{};
             // Swapchain resolve target
             barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
             barriers[0].srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -362,6 +362,25 @@ int main() {
                 barrierCount = 2;
                 lastMsaaImage = swapchain.msaaColor.image;
             }
+            
+            // Depth buffer transition
+            static VkImage lastDepthImage = VK_NULL_HANDLE;
+            bool depthFirstUse = (lastDepthImage != swapchain.depthImage.image);
+            barriers[barrierCount].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+            barriers[barrierCount].srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            barriers[barrierCount].srcAccessMask = 0;
+            barriers[barrierCount].dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            barriers[barrierCount].dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            barriers[barrierCount].oldLayout = depthFirstUse ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            barriers[barrierCount].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            barriers[barrierCount].image = swapchain.depthImage.image;
+            barriers[barrierCount].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+            barriers[barrierCount].subresourceRange.baseMipLevel = 0;
+            barriers[barrierCount].subresourceRange.levelCount = 1;
+            barriers[barrierCount].subresourceRange.baseArrayLayer = 0;
+            barriers[barrierCount].subresourceRange.layerCount = 1;
+            barrierCount++;
+            lastDepthImage = swapchain.depthImage.image;
 
             VkDependencyInfo dependencyInfo{};
             dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
@@ -388,6 +407,15 @@ int main() {
             }
             colorAttachment.clearValue.color = {{0.05f, 0.05f, 0.08f, 1.0f}};
 
+            // Depth attachment
+            VkRenderingAttachmentInfo depthAttachment{};
+            depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            depthAttachment.imageView = swapchain.depthImage.view;
+            depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depthAttachment.clearValue.depthStencil = {1.0f, 0};
+
             VkRenderingInfo renderingInfo{};
             renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
             renderingInfo.renderArea.offset = {0, 0};
@@ -395,6 +423,7 @@ int main() {
             renderingInfo.layerCount = 1;
             renderingInfo.colorAttachmentCount = 1;
             renderingInfo.pColorAttachments = &colorAttachment;
+            renderingInfo.pDepthAttachment = &depthAttachment;
 
             vkCmdBeginRendering(cmd, &renderingInfo);
 

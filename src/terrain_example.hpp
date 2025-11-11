@@ -4,6 +4,8 @@
 #include "swapchain.hpp"
 #include "terrain_renderer.hpp"
 #include "terrain_pipeline.hpp"
+#include "tree_renderer.hpp"
+#include "tree_pipeline.hpp"
 #include "camera.hpp"
 
 // Example terrain scene setup
@@ -13,6 +15,7 @@ public:
         : device(device)
         , swapchain(swapchain)
         , terrainRenderer(device, 1.0f) // Hex size of 1.0
+        , treeRenderer(device)
         , camera()
     {
         // Setup camera for diorama view
@@ -25,15 +28,20 @@ public:
         // Initialize terrain
         initializeSampleTerrain();
         
-        // Create pipeline
+        // Create pipelines
         createTerrainPipeline(device, swapchain, pipeline);
         createTerrainCommandBuffers(device, pipeline, swapchain.MAX_FRAMES_IN_FLIGHT);
+        createTreePipeline(device, swapchain, treePipeline, swapchain.depthFormat);
+        
+        // Generate trees on grass tiles
+        treeRenderer.generateTrees(terrainRenderer);
         
         std::cout << "Terrain example initialized." << std::endl;
     }
     
     ~TerrainExample() {
         destroyTerrainPipeline(device, pipeline);
+        destroyTreePipeline(device, treePipeline);
     }
     
     void initializeSampleTerrain() {
@@ -61,10 +69,7 @@ public:
     }
     
     void render(VkCommandBuffer cmd) {
-        // Bind pipeline
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
-        
-        // Set viewport and scissor
+        // Set viewport and scissor (shared by both pipelines)
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
@@ -79,9 +84,14 @@ public:
         scissor.extent = swapchain.extent;
         vkCmdSetScissor(cmd, 0, 1, &scissor);
         
+        glm::mat4 viewProj = camera.getViewProjectionMatrix();
+        
+        // ===== Render terrain =====
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
+        
         // Push constants
         TerrainPushConstants pushConstants;
-        pushConstants.viewProj = camera.getViewProjectionMatrix();
+        pushConstants.viewProj = viewProj;
         pushConstants.cameraPos = camera.position;
         pushConstants.time = elapsedTime;
         
@@ -100,8 +110,12 @@ public:
         vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
         vkCmdBindIndexBuffer(cmd, terrainRenderer.getIndexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
         
-        // Draw
+        // Draw terrain
         vkCmdDrawIndexed(cmd, terrainRenderer.getIndexCount(), 1, 0, 0, 0);
+        
+        // ===== Render trees =====
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, treePipeline.pipeline);
+        treeRenderer.render(cmd, treePipeline.pipelineLayout, viewProj);
     }
     
     Camera& getCamera() { return camera; }
@@ -110,7 +124,9 @@ private:
     Device& device;
     Swapchain& swapchain;
     TerrainRenderer terrainRenderer;
+    TreeRenderer treeRenderer;
     TerrainPipeline pipeline;
+    TreePipeline treePipeline;
     Camera camera;
     float elapsedTime = 0.0f;
 };

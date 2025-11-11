@@ -158,6 +158,13 @@ void createSwapchain(Device& device, VkSurfaceKHR surface, Window& window, Swapc
         swapchain.msaaColor = {}; // zero-init
     }
 
+    // Create depth buffer
+    swapchain.depthImage = createImage(device, extent.width, extent.height, swapchain.depthFormat,
+                                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                       VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+                                       1, swapchain.msaaSamples);
+    createImageView(device, swapchain.depthImage, VK_IMAGE_ASPECT_DEPTH_BIT);
+
     // Create synchronization objects
     // imageAvailable: one per frame-in-flight (we don't know which image we'll get before acquire)
     swapchain.imageAvailableSemaphores.resize(Swapchain::MAX_FRAMES_IN_FLIGHT);
@@ -204,6 +211,13 @@ void cleanupSwapchain(Device& device, Swapchain& swapchain) {
         destroyImage(device, swapchain.msaaColor);
         swapchain.msaaColor = {};
     }
+    
+    // Destroy depth buffer
+    if (swapchain.depthImage.image != VK_NULL_HANDLE) {
+        destroyImage(device, swapchain.depthImage);
+        swapchain.depthImage = {};
+    }
+    
     for (auto& img : swapchain.images) {
         if (img.view != VK_NULL_HANDLE) {
             vkDestroyImageView(device.device, img.view, nullptr);

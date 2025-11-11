@@ -43,5 +43,17 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
+glslc tree.vert -o tree.vert.spv
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to compile tree.vert
+    exit /b 1
+)
+
+glslc tree.frag -o tree.frag.spv
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to compile tree.frag
+    exit /b 1
+)
+
 echo All shaders compiled successfully!
 

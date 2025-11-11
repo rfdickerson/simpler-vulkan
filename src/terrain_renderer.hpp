@@ -35,6 +35,7 @@ public:
     
     // Get terrain parameters for modification
     TerrainRenderParams& getRenderParams() { return renderParams; }
+    const TerrainRenderParams& getRenderParams() const { return renderParams; }
     
     // Get mesh data
     const HexMesh& getMesh() const { return mesh; }

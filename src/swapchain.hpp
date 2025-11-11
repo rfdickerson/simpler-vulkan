@@ -23,6 +23,10 @@ struct Swapchain {
     Image msaaColor;
     bool msaaNeedsTransition = false;
     
+    // Depth buffer
+    Image depthImage;
+    VkFormat depthFormat = VK_FORMAT_D32_SFLOAT;
+    
     uint32_t currentImageIndex = 0;
     
     // Synchronization
