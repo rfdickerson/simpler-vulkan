@@ -110,7 +110,7 @@ void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipe
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.rasterizationSamples = swapchain.msaaSamples;
 
     // Blending (alpha blending for text)
     VkPipelineColorBlendAttachmentState colorBlendAttachment{};
@@ -140,6 +140,15 @@ void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipe
     dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
+
+    // Depth-stencil (text does not write depth by default)
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_FALSE;
+    depthStencil.depthWriteEnable = VK_FALSE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
 
     // Descriptor set layout (for texture sampler)
     VkDescriptorSetLayoutBinding samplerLayoutBinding{};
@@ -181,6 +190,7 @@ void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipe
     renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachmentFormats = &colorFormat;
+    renderingInfo.depthAttachmentFormat = swapchain.depthFormat;
 
     // Create graphics pipeline
     VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -195,6 +205,7 @@ void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipe
     pipelineInfo.pMultisampleState = &multisampling;
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.pDepthStencilState = &depthStencil;
     pipelineInfo.layout = pipeline.pipelineLayout;
     pipelineInfo.renderPass = VK_NULL_HANDLE; // Using dynamic rendering
     pipelineInfo.subpass = 0;

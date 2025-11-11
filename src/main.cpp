@@ -16,6 +16,7 @@
 #include "text_pipeline.hpp"
 #include "terrain_example.hpp"
 #include <glm/glm.hpp>
+#include "render_graph.hpp"
 
 // Colored vertex structure for the triangle
 struct ColoredVertex {
@@ -325,134 +326,39 @@ int main() {
             cmdBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
             vkBeginCommandBuffer(cmd, &cmdBeginInfo);
 
-            // Transition swapchain image to color attachment
-            VkImageMemoryBarrier2 barriers[3]{};
-            // Swapchain resolve target
-            barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            barriers[0].srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-            barriers[0].srcAccessMask = 0;
-            barriers[0].dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-            barriers[0].dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-            barriers[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            barriers[0].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            barriers[0].image = swapchain.images[swapchain.currentImageIndex].image;
-            barriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            barriers[0].subresourceRange.baseMipLevel = 0;
-            barriers[0].subresourceRange.levelCount = 1;
-            barriers[0].subresourceRange.baseArrayLayer = 0;
-            barriers[0].subresourceRange.layerCount = 1;
+            RenderGraph graph;
+            graph.beginFrame(device, swapchain, cmd);
 
-            uint32_t barrierCount = 1;
+            RenderAttachment att{};
+            att.extent = swapchain.extent;
+            att.samples = swapchain.msaaSamples;
+            att.colorFormat = swapchain.format;
+            att.depthFormat = swapchain.depthFormat;
             if (swapchain.msaaSamples != VK_SAMPLE_COUNT_1_BIT) {
-                static VkImage lastMsaaImage = VK_NULL_HANDLE;
-                bool firstUse = (lastMsaaImage != swapchain.msaaColor.image);
-                barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-                barriers[1].srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-                barriers[1].srcAccessMask = 0;
-                barriers[1].dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-                barriers[1].dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-                barriers[1].oldLayout = firstUse ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-                barriers[1].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-                barriers[1].image = swapchain.msaaColor.image;
-                barriers[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                barriers[1].subresourceRange.baseMipLevel = 0;
-                barriers[1].subresourceRange.levelCount = 1;
-                barriers[1].subresourceRange.baseArrayLayer = 0;
-                barriers[1].subresourceRange.layerCount = 1;
-                barrierCount = 2;
-                lastMsaaImage = swapchain.msaaColor.image;
-            }
-            
-            // Depth buffer transition
-            static VkImage lastDepthImage = VK_NULL_HANDLE;
-            bool depthFirstUse = (lastDepthImage != swapchain.depthImage.image);
-            barriers[barrierCount].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            barriers[barrierCount].srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-            barriers[barrierCount].srcAccessMask = 0;
-            barriers[barrierCount].dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-            barriers[barrierCount].dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            barriers[barrierCount].oldLayout = depthFirstUse ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            barriers[barrierCount].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            barriers[barrierCount].image = swapchain.depthImage.image;
-            barriers[barrierCount].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-            barriers[barrierCount].subresourceRange.baseMipLevel = 0;
-            barriers[barrierCount].subresourceRange.levelCount = 1;
-            barriers[barrierCount].subresourceRange.baseArrayLayer = 0;
-            barriers[barrierCount].subresourceRange.layerCount = 1;
-            barrierCount++;
-            lastDepthImage = swapchain.depthImage.image;
-
-            VkDependencyInfo dependencyInfo{};
-            dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-            dependencyInfo.imageMemoryBarrierCount = barrierCount;
-            dependencyInfo.pImageMemoryBarriers = barriers;
-            vkCmdPipelineBarrier2(cmd, &dependencyInfo);
-
-            // Begin rendering (dynamic rendering)
-            VkRenderingAttachmentInfo colorAttachment{};
-            colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-            if (swapchain.msaaSamples != VK_SAMPLE_COUNT_1_BIT) {
-                colorAttachment.imageView = swapchain.msaaColor.view;
-                colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-                colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-                colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-                colorAttachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
-                colorAttachment.resolveImageView = swapchain.images[swapchain.currentImageIndex].view;
-                colorAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+                att.colorView = swapchain.msaaColor.view;
+                att.colorImage = swapchain.msaaColor.image;
+                att.resolveView = swapchain.images[swapchain.currentImageIndex].view;
+                att.resolveImage = swapchain.images[swapchain.currentImageIndex].image;
             } else {
-                colorAttachment.imageView = swapchain.images[swapchain.currentImageIndex].view;
-                colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-                colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-                colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+                att.colorView = swapchain.images[swapchain.currentImageIndex].view;
+                att.colorImage = swapchain.images[swapchain.currentImageIndex].image;
             }
-            colorAttachment.clearValue.color = {{0.05f, 0.05f, 0.08f, 1.0f}};
+            att.depthView = swapchain.depthImage.view;
+            att.depthImage = swapchain.depthImage.image;
 
-            // Depth attachment
-            VkRenderingAttachmentInfo depthAttachment{};
-            depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-            depthAttachment.imageView = swapchain.depthImage.view;
-            depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-            depthAttachment.clearValue.depthStencil = {1.0f, 0};
+            RenderPassDesc pass{};
+            pass.name = "terrain";
+            pass.attachments = att;
+            pass.clearColor = {{0.05f, 0.05f, 0.08f, 1.0f}};
+            pass.clearDepth = 1.0f;
+            pass.clearStencil = 0;
+            pass.record = [&](VkCommandBuffer c) {
+                terrainExample->render(c);
+            };
 
-            VkRenderingInfo renderingInfo{};
-            renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-            renderingInfo.renderArea.offset = {0, 0};
-            renderingInfo.renderArea.extent = swapchain.extent;
-            renderingInfo.layerCount = 1;
-            renderingInfo.colorAttachmentCount = 1;
-            renderingInfo.pColorAttachments = &colorAttachment;
-            renderingInfo.pDepthAttachment = &depthAttachment;
-
-            vkCmdBeginRendering(cmd, &renderingInfo);
-
-            // Render terrain
-            terrainExample->render(cmd);
-
-            vkCmdEndRendering(cmd);
-
-            // Transition to present
-            VkImageMemoryBarrier2 presentBarrier{};
-            presentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            presentBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-            presentBarrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-            presentBarrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-            presentBarrier.dstAccessMask = 0;
-            presentBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            presentBarrier.image = swapchain.images[swapchain.currentImageIndex].image;
-            presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            presentBarrier.subresourceRange.baseMipLevel = 0;
-            presentBarrier.subresourceRange.levelCount = 1;
-            presentBarrier.subresourceRange.baseArrayLayer = 0;
-            presentBarrier.subresourceRange.layerCount = 1;
-
-            VkDependencyInfo dep2{};
-            dep2.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-            dep2.imageMemoryBarrierCount = 1;
-            dep2.pImageMemoryBarriers = &presentBarrier;
-            vkCmdPipelineBarrier2(cmd, &dep2);
+            graph.addPass(pass);
+            graph.execute();
+            graph.endFrame();
 
             vkEndCommandBuffer(cmd);
 

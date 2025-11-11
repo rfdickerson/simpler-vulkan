@@ -91,6 +91,15 @@ void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
 
+    // Depth-stencil state
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
+
     // Descriptor set layout (uniform buffer for terrain parameters)
     VkDescriptorSetLayoutBinding uboBinding{};
     uboBinding.binding = 0;
@@ -132,6 +141,7 @@ void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline
     renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachmentFormats = &colorFormat;
+    renderingInfo.depthAttachmentFormat = swapchain.depthFormat;
 
     // Create graphics pipeline
     VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -146,6 +156,7 @@ void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline
     pipelineInfo.pMultisampleState = &multisampling;
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.pDepthStencilState = &depthStencil;
     pipelineInfo.layout = pipeline.pipelineLayout;
     pipelineInfo.renderPass = VK_NULL_HANDLE;
     pipelineInfo.subpass = 0;
