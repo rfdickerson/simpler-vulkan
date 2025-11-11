@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 #include <functional>
 #include <vector>
+#include <unordered_map>
 #include "device.hpp"
 #include "swapchain.hpp"
 
@@ -46,6 +47,9 @@ private:
     // Track last images to avoid unnecessary undefined->optimal toggles
     VkImage lastMsaaImage{VK_NULL_HANDLE};
     VkImage lastDepthImage{VK_NULL_HANDLE};
+
+    // Track current known layouts per image across frames
+    std::unordered_map<VkImage, VkImageLayout> imageLayouts;
 };
 
 
