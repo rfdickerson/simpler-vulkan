@@ -87,16 +87,33 @@ void RenderGraph::execute() {
         if (pass.attachments.depthImage != VK_NULL_HANDLE) {
             auto& b = barriers[barrierCount++];
             b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            b.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-            b.srcAccessMask = 0;
-            b.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-            b.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             VkImage oldImg = pass.attachments.depthImage;
             VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             auto it = imageLayouts.find(oldImg);
             if (it != imageLayouts.end()) {
                 oldLayout = it->second;
             }
+            
+            // If depth was written in a previous pass, we need to wait for those writes
+            if (oldLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+                b.srcStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+                b.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            } else {
+                b.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+                b.srcAccessMask = 0;
+            }
+            
+            // Determine destination access based on load operation
+            if (pass.depthLoadOp == VK_ATTACHMENT_LOAD_OP_LOAD) {
+                // Loading existing depth - need read access
+                b.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+                b.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            } else {
+                // Clearing depth - just write access
+                b.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+                b.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            }
+            
             b.oldLayout = oldLayout;
             b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             b.image = pass.attachments.depthImage;
@@ -119,18 +136,22 @@ void RenderGraph::execute() {
 
         // Build rendering attachments
         VkRenderingAttachmentInfo colorAttachment{};
-        colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        colorAttachment.imageView = pass.attachments.colorView;
-        colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.clearValue.color = pass.clearColor;
+        VkRenderingAttachmentInfo* pColorAttachment = nullptr;
+        if (pass.attachments.colorView != VK_NULL_HANDLE) {
+            colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            colorAttachment.imageView = pass.attachments.colorView;
+            colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            colorAttachment.clearValue.color = pass.clearColor;
 
-        // Resolve if provided
-        if (pass.attachments.resolveView != VK_NULL_HANDLE) {
-            colorAttachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
-            colorAttachment.resolveImageView = pass.attachments.resolveView;
-            colorAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            // Resolve if provided
+            if (pass.attachments.resolveView != VK_NULL_HANDLE) {
+                colorAttachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+                colorAttachment.resolveImageView = pass.attachments.resolveView;
+                colorAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            }
+            pColorAttachment = &colorAttachment;
         }
 
         // Depth attachment
@@ -140,8 +161,8 @@ void RenderGraph::execute() {
             depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             depthAttachment.imageView = pass.attachments.depthView;
             depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            depthAttachment.loadOp = pass.depthLoadOp;
+            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE; // Store depth for subsequent passes
             depthAttachment.clearValue.depthStencil = { pass.clearDepth, pass.clearStencil };
             pDepthAttachment = &depthAttachment;
         }
@@ -152,8 +173,8 @@ void RenderGraph::execute() {
         renderingInfo.renderArea.offset = {0, 0};
         renderingInfo.renderArea.extent = pass.attachments.extent;
         renderingInfo.layerCount = 1;
-        renderingInfo.colorAttachmentCount = 1;
-        renderingInfo.pColorAttachments = &colorAttachment;
+        renderingInfo.colorAttachmentCount = (pColorAttachment != nullptr) ? 1 : 0;
+        renderingInfo.pColorAttachments = pColorAttachment;
         renderingInfo.pDepthAttachment = pDepthAttachment;
 
         vkCmdBeginRendering(cmd, &renderingInfo);

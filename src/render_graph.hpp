@@ -28,6 +28,7 @@ struct RenderPassDesc {
     VkClearColorValue clearColor{};
     float clearDepth{1.0f};
     uint32_t clearStencil{0};
+    VkAttachmentLoadOp depthLoadOp{VK_ATTACHMENT_LOAD_OP_CLEAR}; // Control depth load operation
     std::function<void(VkCommandBuffer)> record;
 };
 

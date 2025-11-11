@@ -81,6 +81,56 @@ public:
         updateTerrainParams(pipeline, params);
     }
     
+    void renderDepthOnly(VkCommandBuffer cmd) {
+        // Set viewport and scissor
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(swapchain.extent.width);
+        viewport.height = static_cast<float>(swapchain.extent.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = swapchain.extent;
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        
+        glm::mat4 viewProj = camera.getViewProjectionMatrix();
+        
+        // ===== Render terrain depth only =====
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.depthOnlyPipeline);
+        
+        // Push constants (minimal - just viewProj for depth)
+        TerrainPushConstants pushConstants;
+        pushConstants.viewProj = viewProj;
+        pushConstants.cameraPos = camera.position;
+        pushConstants.time = elapsedTime;
+        
+        vkCmdPushConstants(cmd, pipeline.pipelineLayout,
+                          VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                          0, sizeof(TerrainPushConstants), &pushConstants);
+        
+        // Bind descriptor set
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              pipeline.pipelineLayout, 0, 1,
+                              &pipeline.descriptorSet, 0, nullptr);
+        
+        // Bind vertex and index buffers
+        VkBuffer vertexBuffers[] = {terrainRenderer.getVertexBuffer().buffer};
+        VkDeviceSize offsets[] = {0};
+        vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(cmd, terrainRenderer.getIndexBuffer().buffer, 0, VK_INDEX_TYPE_UINT32);
+        
+        // Draw terrain
+        vkCmdDrawIndexed(cmd, terrainRenderer.getIndexCount(), 1, 0, 0, 0);
+        
+        // ===== Render trees depth only =====
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, treePipeline.depthOnlyPipeline);
+        treeRenderer.render(cmd, treePipeline.pipelineLayout, viewProj);
+    }
+    
     void render(VkCommandBuffer cmd) {
         // Set viewport and scissor (shared by both pipelines)
         VkViewport viewport{};

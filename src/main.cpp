@@ -358,6 +358,28 @@ int main() {
 
             graph.beginFrame(device, swapchain, cmd);
 
+            // Depth prepass - depth only, no color
+            RenderAttachment depthAtt{};
+            depthAtt.extent = swapchain.extent;
+            depthAtt.samples = swapchain.msaaSamples;
+            depthAtt.depthFormat = swapchain.depthFormat;
+            depthAtt.depthView = swapchain.depthImage.view;
+            depthAtt.depthImage = swapchain.depthImage.image;
+            // No color attachments for depth prepass
+
+            RenderPassDesc depthPass{};
+            depthPass.name = "depth_prepass";
+            depthPass.attachments = depthAtt;
+            depthPass.clearDepth = 1.0f;
+            depthPass.clearStencil = 0;
+            depthPass.depthLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            depthPass.record = [&](VkCommandBuffer c) {
+                terrainExample->renderDepthOnly(c);
+            };
+
+            graph.addPass(depthPass);
+
+            // Main pass - color + depth (load depth from prepass)
             RenderAttachment att{};
             att.extent = swapchain.extent;
             att.samples = swapchain.msaaSamples;
@@ -381,6 +403,7 @@ int main() {
             pass.clearColor = {{0.05f, 0.05f, 0.08f, 1.0f}};
             pass.clearDepth = 1.0f;
             pass.clearStencil = 0;
+            pass.depthLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Load depth from prepass
             pass.record = [&](VkCommandBuffer c) {
                 terrainExample->render(c);
             };

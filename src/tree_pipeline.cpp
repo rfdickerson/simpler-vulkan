@@ -97,12 +97,12 @@ void createTreePipeline(Device& device, Swapchain& swapchain, TreePipeline& pipe
         ? swapchain.msaaSamples
         : VK_SAMPLE_COUNT_1_BIT;
 
-    // Depth stencil state
+    // Depth stencil state for main pass (depth already written in prepass)
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.depthTestEnable = VK_TRUE;
-    depthStencil.depthWriteEnable = VK_TRUE;
-    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthStencil.depthWriteEnable = VK_FALSE; // Don't write depth in main pass (prepass did it)
+    depthStencil.depthCompareOp = VK_COMPARE_OP_EQUAL; // Only render fragments at prepass depth
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
 
@@ -176,14 +176,55 @@ void createTreePipeline(Device& device, Swapchain& swapchain, TreePipeline& pipe
         throw std::runtime_error("Failed to create tree graphics pipeline!");
     }
 
+    // Create depth-only pipeline for prepass
+    // Load depth-only fragment shader
+    VkShaderModule depthFragShaderModule = loadShaderModule(device, "../shaders/tree_depth.frag.spv");
+    
+    VkPipelineShaderStageCreateInfo depthFragShaderStageInfo{};
+    depthFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    depthFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    depthFragShaderStageInfo.module = depthFragShaderModule;
+    depthFragShaderStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo depthOnlyShaderStages[] = {vertShaderStageInfo, depthFragShaderStageInfo};
+
+    // Depth stencil state for depth prepass (write depth)
+    VkPipelineDepthStencilStateCreateInfo depthOnlyDepthStencil{};
+    depthOnlyDepthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthOnlyDepthStencil.depthTestEnable = VK_TRUE;
+    depthOnlyDepthStencil.depthWriteEnable = VK_TRUE; // Write depth in prepass
+    depthOnlyDepthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthOnlyDepthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthOnlyDepthStencil.stencilTestEnable = VK_FALSE;
+
+    VkPipelineRenderingCreateInfo depthOnlyRenderingInfo{};
+    depthOnlyRenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    depthOnlyRenderingInfo.colorAttachmentCount = 0; // No color attachments
+    depthOnlyRenderingInfo.pColorAttachmentFormats = nullptr;
+    depthOnlyRenderingInfo.depthAttachmentFormat = depthFormat;
+
+    VkGraphicsPipelineCreateInfo depthOnlyPipelineInfo = pipelineInfo;
+    depthOnlyPipelineInfo.pNext = &depthOnlyRenderingInfo;
+    depthOnlyPipelineInfo.pStages = depthOnlyShaderStages; // Use depth-only fragment shader
+    depthOnlyPipelineInfo.pDepthStencilState = &depthOnlyDepthStencil; // Use depth-writing state
+
+    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &depthOnlyPipelineInfo, nullptr, &pipeline.depthOnlyPipeline) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create tree depth-only pipeline!");
+    }
+
     // Cleanup shader modules
     vkDestroyShaderModule(device.device, vertShaderModule, nullptr);
     vkDestroyShaderModule(device.device, fragShaderModule, nullptr);
+    vkDestroyShaderModule(device.device, depthFragShaderModule, nullptr);
 
     std::cout << "Tree pipeline created successfully." << std::endl;
 }
 
 void destroyTreePipeline(Device& device, TreePipeline& pipeline) {
+    if (pipeline.depthOnlyPipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(device.device, pipeline.depthOnlyPipeline, nullptr);
+        pipeline.depthOnlyPipeline = VK_NULL_HANDLE;
+    }
     if (pipeline.pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device.device, pipeline.pipeline, nullptr);
         pipeline.pipeline = VK_NULL_HANDLE;

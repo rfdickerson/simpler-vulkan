@@ -55,5 +55,17 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
+glslc terrain_depth.frag -o terrain_depth.frag.spv
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to compile terrain_depth.frag
+    exit /b 1
+)
+
+glslc tree_depth.frag -o tree_depth.frag.spv
+if %ERRORLEVEL% NEQ 0 (
+    echo Failed to compile tree_depth.frag
+    exit /b 1
+)
+
 echo All shaders compiled successfully!
 

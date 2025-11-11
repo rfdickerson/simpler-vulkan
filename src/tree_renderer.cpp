@@ -134,7 +134,8 @@ void TreeRenderer::generateTrees(const TerrainRenderer& terrainRenderer) {
             float offsetX = offsetDist(rng) * hexSize;
             float offsetZ = offsetDist(rng) * hexSize;
             
-            glm::vec3 position = hexCenter + glm::vec3(offsetX, 0.0f, offsetZ);
+            // Small vertical offset to prevent z-fighting with terrain
+            glm::vec3 position = hexCenter + glm::vec3(offsetX, 0.001f, offsetZ);
             float rotation = rotationDist(rng);
             
             instances.emplace_back(position, rotation);

@@ -27,6 +27,7 @@ struct TerrainParamsUBO {
 struct TerrainPipeline {
     VkPipelineLayout pipelineLayout;
     VkPipeline pipeline;
+    VkPipeline depthOnlyPipeline; // Depth-only variant for prepass
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;

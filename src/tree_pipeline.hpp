@@ -14,6 +14,7 @@ struct TreePushConstants {
 struct TreePipeline {
     VkPipelineLayout pipelineLayout;
     VkPipeline pipeline;
+    VkPipeline depthOnlyPipeline; // Depth-only variant for prepass
 };
 
 // Pipeline creation and management
