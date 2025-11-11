@@ -17,6 +17,9 @@ layout(push_constant) uniform TiltShiftPC {
     float padding;
 } pc;
 
+// Simple hash for per-pixel angle jitter
+float hash12(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+
 void main() {
     vec2 uv = vUV;
     
@@ -45,40 +48,39 @@ void main() {
         return;
     }
 
-    // Poisson-like disk samples (normalized, roughly within unit circle)
-    const vec2 OFFS[12] = vec2[](
-        vec2( 0.0,  0.0),
-        vec2( 0.5,  0.0),
-        vec2(-0.5,  0.0),
-        vec2( 0.0,  0.5),
-        vec2( 0.0, -0.5),
-        vec2( 0.35,  0.35),
-        vec2(-0.35,  0.35),
-        vec2( 0.35, -0.35),
-        vec2(-0.35, -0.35),
-        vec2( 1.0,  0.0),
-        vec2( 0.0,  1.0),
-        vec2(-1.0,  0.0)
-    );
+    // Golden-angle jittered disk sampling with per-pixel rotation to reduce banding
+    float ang0 = hash12(uv) * 6.28318530718;
+
+    const int SAMPLES = 24;
+    const float GA = 2.39996322973; // golden angle
 
     vec2 texel = 1.0 / pc.resolution;
     vec3 sum = vec3(0.0);
     float wsum = 0.0;
 
-    for (int i = 0; i < 12; ++i) {
-        vec2 duv = OFFS[i] * (radiusPx * texel);
+    float sigma = max(radiusPx * 0.5, 1.0);
+    float invTwoSigma2 = 0.5 / (sigma * sigma);
+
+    for (int i = 0; i < SAMPLES; ++i) {
+        float t = (float(i) + 0.5) / float(SAMPLES); // 0..1
+        float r = t;                                  // radial progression
+        float a = ang0 + GA * float(i);
+        vec2 dir = vec2(cos(a), sin(a));
+
+        float distPx = r * radiusPx;
+        float w = exp(-(distPx * distPx) * invTwoSigma2); // Gaussian weight in pixel space
+        vec2 duv = dir * (distPx) * texel;
+
         vec3 c = texture(uSceneColor, uv + duv).rgb;
-        float r2 = dot(OFFS[i], OFFS[i]);
-        float w = exp(-r2); // simple radially decaying weight
         sum += c * w;
         wsum += w;
     }
 
     vec3 blurred = sum / max(wsum, 1e-5);
 
-    // Blend amount based on how strong the blur radius is
-    float t = clamp(radiusPx / pc.maxRadiusPixels, 0.0, 1.0);
-    
+    // Smooth blend amount based on blur radius
+    float t = smoothstep(0.0, pc.maxRadiusPixels, radiusPx);
+
     // Apply the blur blend
     vec3 finalColor = mix(base, blurred, t);
     outColor = vec4(finalColor, 1.0);
