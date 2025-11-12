@@ -1,4 +1,4 @@
-﻿#include <vulkan/vulkan.h>
+#include <vulkan/vulkan.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -14,6 +14,7 @@
 #include "text.hpp"
 #include "glyph_atlas.hpp"
 #include "swapchain.hpp"
+#include "vulkan_pipeline_utils.hpp"
 #include "text_pipeline.hpp"
 #include "terrain_example.hpp"
 #include <glm/glm.hpp>
@@ -34,23 +35,8 @@ struct TrianglePipeline {
 
 // Create triangle rendering pipeline
 void createTrianglePipeline(Device& device, Swapchain& swapchain, TrianglePipeline& pipeline) {
-    // Load shaders
-    VkShaderModule vertShaderModule = loadShaderModule(device, "../shaders/triangle.vert.spv");
-    VkShaderModule fragShaderModule = loadShaderModule(device, "../shaders/triangle.frag.spv");
-
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+    ShaderModule vertexShader(device, "../shaders/triangle.vert.spv");
+    ShaderModule fragmentShader(device, "../shaders/triangle.frag.spv");
 
     // Vertex input
     VkVertexInputBindingDescription bindingDescription{};
@@ -118,15 +104,10 @@ void createTrianglePipeline(Device& device, Swapchain& swapchain, TrianglePipeli
     colorBlending.pAttachments = &colorBlendAttachment;
 
     // Dynamic states
-    std::vector<VkDynamicState> dynamicStates = {
+    const std::vector<VkDynamicState> dynamicStates{
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR
     };
-
-    VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
 
     // Pipeline layout (no descriptors or push constants needed)
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
@@ -145,30 +126,19 @@ void createTrianglePipeline(Device& device, Swapchain& swapchain, TrianglePipeli
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachmentFormats = &colorFormat;
 
-    // Create graphics pipeline
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.pNext = &renderingInfo;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = pipeline.pipelineLayout;
-    pipelineInfo.renderPass = VK_NULL_HANDLE;
-    pipelineInfo.subpass = 0;
+    GraphicsPipelineBuilder builder;
+    builder.addStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT)
+           .addStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
+           .setVertexInput(vertexInputInfo)
+           .setInputAssembly(inputAssembly)
+           .setViewport(viewportState)
+           .setRasterization(rasterizer)
+           .setMultisample(multisampling)
+           .setColorBlend(colorBlending)
+           .setDynamicStates(dynamicStates)
+           .setRenderingInfo(renderingInfo);
 
-    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline.pipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create triangle graphics pipeline!");
-    }
-
-    // Cleanup shader modules
-    vkDestroyShaderModule(device.device, vertShaderModule, nullptr);
-    vkDestroyShaderModule(device.device, fragShaderModule, nullptr);
+    pipeline.pipeline = builder.build(device, pipeline.pipelineLayout, "triangle graphics pipeline");
 
     std::cout << "Triangle pipeline created successfully." << std::endl;
 }

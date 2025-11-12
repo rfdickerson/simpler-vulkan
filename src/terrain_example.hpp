@@ -93,20 +93,7 @@ public:
     }
     
     void renderDepthOnly(VkCommandBuffer cmd) {
-        // Set viewport and scissor
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapchain.extent.width);
-        viewport.height = static_cast<float>(swapchain.extent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-        
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = swapchain.extent;
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        applyFullscreenViewport(cmd);
         
         glm::mat4 viewProj = camera.getViewProjectionMatrix();
         
@@ -143,20 +130,7 @@ public:
     }
     
     void render(VkCommandBuffer cmd) {
-        // Set viewport and scissor (shared by both pipelines)
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapchain.extent.width);
-        viewport.height = static_cast<float>(swapchain.extent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-        
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = swapchain.extent;
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        applyFullscreenViewport(cmd);
         
         glm::mat4 viewProj = camera.getViewProjectionMatrix();
         
@@ -193,20 +167,7 @@ public:
     }
 
     void renderSSAO(VkCommandBuffer cmd) {
-        // Fullscreen viewport
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapchain.extent.width);
-        viewport.height = static_cast<float>(swapchain.extent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = swapchain.extent;
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        applyFullscreenViewport(cmd);
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ssaoPipeline.pipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ssaoPipeline.pipelineLayout, 0, 1, &ssaoPipeline.descriptorSet, 0, nullptr);
@@ -230,19 +191,7 @@ public:
     }
 
     void renderTiltShift(VkCommandBuffer cmd) {
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapchain.extent.width);
-        viewport.height = static_cast<float>(swapchain.extent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = swapchain.extent;
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
+        applyFullscreenViewport(cmd);
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, tiltPipeline.pipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, tiltPipeline.pipelineLayout, 0, 1, &tiltPipeline.descriptorSet, 0, nullptr);
@@ -269,6 +218,22 @@ public:
     float getHexSize() const { return terrainRenderer.getRenderParams().hexSize; }
     
 private:
+      void applyFullscreenViewport(VkCommandBuffer cmd) const {
+          VkViewport viewport{};
+          viewport.x = 0.0f;
+          viewport.y = 0.0f;
+          viewport.width = static_cast<float>(swapchain.extent.width);
+          viewport.height = static_cast<float>(swapchain.extent.height);
+          viewport.minDepth = 0.0f;
+          viewport.maxDepth = 1.0f;
+          vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+          VkRect2D scissor{};
+          scissor.offset = {0, 0};
+          scissor.extent = swapchain.extent;
+          vkCmdSetScissor(cmd, 0, 1, &scissor);
+      }
+
     Device& device;
     Swapchain& swapchain;
     TerrainRenderer terrainRenderer;

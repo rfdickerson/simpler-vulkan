@@ -1,5 +1,5 @@
 #include "tree_pipeline.hpp"
-#include "text_pipeline.hpp"
+#include "vulkan_pipeline_utils.hpp"
 #include "tree_renderer.hpp"
 
 #include <iostream>
@@ -8,23 +8,9 @@
 #include <array>
 
 void createTreePipeline(Device& device, Swapchain& swapchain, TreePipeline& pipeline, VkFormat depthFormat) {
-    // Load shaders
-    VkShaderModule vertShaderModule = loadShaderModule(device, "../shaders/tree.vert.spv");
-    VkShaderModule fragShaderModule = loadShaderModule(device, "../shaders/tree.frag.spv");
-
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+    ShaderModule vertexShader(device, "../shaders/tree.vert.spv");
+    ShaderModule fragmentShader(device, "../shaders/tree.frag.spv");
+    ShaderModule depthFragmentShader(device, "../shaders/tree_depth.frag.spv");
 
     // Vertex input - binding 0 for vertex data, binding 1 for instance data
     std::array<VkVertexInputBindingDescription, 2> bindingDescriptions{};
@@ -119,15 +105,10 @@ void createTreePipeline(Device& device, Swapchain& swapchain, TreePipeline& pipe
     colorBlending.pAttachments = &colorBlendAttachment;
 
     // Dynamic states
-    std::vector<VkDynamicState> dynamicStates = {
+    const std::vector<VkDynamicState> dynamicStates{
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR
     };
-
-    VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
 
     // Push constants
     VkPushConstantRange pushConstantRange{};
@@ -154,68 +135,48 @@ void createTreePipeline(Device& device, Swapchain& swapchain, TreePipeline& pipe
     renderingInfo.pColorAttachmentFormats = &colorFormat;
     renderingInfo.depthAttachmentFormat = depthFormat;
 
-    // Create graphics pipeline
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.pNext = &renderingInfo;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pDepthStencilState = &depthStencil;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = pipeline.pipelineLayout;
-    pipelineInfo.renderPass = VK_NULL_HANDLE;
-    pipelineInfo.subpass = 0;
+    GraphicsPipelineBuilder mainBuilder;
+    mainBuilder.addStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT)
+               .addStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
+               .setVertexInput(vertexInputInfo)
+               .setInputAssembly(inputAssembly)
+               .setViewport(viewportState)
+               .setRasterization(rasterizer)
+               .setMultisample(multisampling)
+               .setDepthStencil(depthStencil)
+               .setColorBlend(colorBlending)
+               .setDynamicStates(dynamicStates)
+               .setRenderingInfo(renderingInfo);
 
-    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline.pipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create tree graphics pipeline!");
-    }
+    pipeline.pipeline = mainBuilder.build(device, pipeline.pipelineLayout, "tree graphics pipeline");
 
-    // Create depth-only pipeline for prepass
-    // Load depth-only fragment shader
-    VkShaderModule depthFragShaderModule = loadShaderModule(device, "../shaders/tree_depth.frag.spv");
-    
-    VkPipelineShaderStageCreateInfo depthFragShaderStageInfo{};
-    depthFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    depthFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    depthFragShaderStageInfo.module = depthFragShaderModule;
-    depthFragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo depthOnlyShaderStages[] = {vertShaderStageInfo, depthFragShaderStageInfo};
-
-    // Depth stencil state for depth prepass (write depth)
     VkPipelineDepthStencilStateCreateInfo depthOnlyDepthStencil{};
     depthOnlyDepthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthOnlyDepthStencil.depthTestEnable = VK_TRUE;
-    depthOnlyDepthStencil.depthWriteEnable = VK_TRUE; // Write depth in prepass
+    depthOnlyDepthStencil.depthWriteEnable = VK_TRUE;
     depthOnlyDepthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
     depthOnlyDepthStencil.depthBoundsTestEnable = VK_FALSE;
     depthOnlyDepthStencil.stencilTestEnable = VK_FALSE;
 
-    VkPipelineRenderingCreateInfo depthOnlyRenderingInfo{};
-    depthOnlyRenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    depthOnlyRenderingInfo.colorAttachmentCount = 0; // No color attachments
-    depthOnlyRenderingInfo.pColorAttachmentFormats = nullptr;
-    depthOnlyRenderingInfo.depthAttachmentFormat = depthFormat;
+    VkPipelineRenderingCreateInfo depthRendering{};
+    depthRendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    depthRendering.colorAttachmentCount = 0;
+    depthRendering.pColorAttachmentFormats = nullptr;
+    depthRendering.depthAttachmentFormat = depthFormat;
 
-    VkGraphicsPipelineCreateInfo depthOnlyPipelineInfo = pipelineInfo;
-    depthOnlyPipelineInfo.pNext = &depthOnlyRenderingInfo;
-    depthOnlyPipelineInfo.pStages = depthOnlyShaderStages; // Use depth-only fragment shader
-    depthOnlyPipelineInfo.pDepthStencilState = &depthOnlyDepthStencil; // Use depth-writing state
+    GraphicsPipelineBuilder depthBuilder;
+    depthBuilder.addStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT)
+                .addStage(depthFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
+                .setVertexInput(vertexInputInfo)
+                .setInputAssembly(inputAssembly)
+                .setViewport(viewportState)
+                .setRasterization(rasterizer)
+                .setMultisample(multisampling)
+                .setDepthStencil(depthOnlyDepthStencil)
+                .setDynamicStates(dynamicStates)
+                .setRenderingInfo(depthRendering);
 
-    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &depthOnlyPipelineInfo, nullptr, &pipeline.depthOnlyPipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create tree depth-only pipeline!");
-    }
-
-    // Cleanup shader modules
-    vkDestroyShaderModule(device.device, vertShaderModule, nullptr);
-    vkDestroyShaderModule(device.device, fragShaderModule, nullptr);
-    vkDestroyShaderModule(device.device, depthFragShaderModule, nullptr);
+    pipeline.depthOnlyPipeline = depthBuilder.build(device, pipeline.pipelineLayout, "tree depth-only pipeline");
 
     std::cout << "Tree pipeline created successfully." << std::endl;
 }
