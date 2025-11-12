@@ -38,6 +38,7 @@ public:
 
     // Get the atlas image
     const Image& getAtlasImage() const { return atlasImage_; }
+    bool isFinalized() const { return finalized_; }
 
     // Get atlas dimensions
     uint32_t getAtlasWidth() const { return atlasWidth_; }

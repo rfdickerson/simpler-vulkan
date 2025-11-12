@@ -5,6 +5,7 @@
 // This file demonstrates how to use the image.hpp and glyph_atlas.hpp
 // files to create a texture atlas for rendering text.
 
+#include "buffer.hpp"
 #include "device.hpp"
 #include "glyph_atlas.hpp"
 #include "text.hpp"
@@ -73,6 +74,8 @@ public:
         
         // Initialize HarfBuzz shaper
         shaper_ = std::make_unique<HbShaper>(fontPath, fontSize);
+
+        preloadCommonGlyphs();
     }
     
     // Prepare text for rendering (shapes and ensures glyphs are in atlas)
@@ -86,11 +89,26 @@ public:
         
         return shapedGlyphs;
     }
+
+    void preloadCommonGlyphs() {
+        std::string basicLatin;
+        basicLatin.reserve(96);
+        for (char c = 32; c <= 126; ++c) {
+            basicLatin.push_back(c);
+        }
+        prepareText(basicLatin);
+
+        const std::string extras = u8"¡¿·•–—“”‘’…€£¥₤₿";
+        prepareText(extras);
+    }
     
     // Finalize atlas (call after all text is prepared, before rendering)
-    void finalizeAtlas(VkCommandBuffer cmd) {
-        atlas_.finalizeAtlas(cmd);
-        sampler_ = createAtlasSampler(device_);
+    Buffer finalizeAtlas(VkCommandBuffer cmd) {
+        Buffer staging = atlas_.finalizeAtlas(cmd);
+        if (sampler_ == VK_NULL_HANDLE) {
+            sampler_ = createAtlasSampler(device_);
+        }
+        return staging;
     }
     
     // Get glyph info for rendering
@@ -101,6 +119,7 @@ public:
     // Get atlas resources for binding
     const Image& getAtlasImage() const { return atlas_.getAtlasImage(); }
     VkSampler getSampler() const { return sampler_; }
+    bool isAtlasFinalized() const { return atlas_.isFinalized() && sampler_ != VK_NULL_HANDLE; }
     
     ~TextRenderer() {
         if (sampler_ != VK_NULL_HANDLE) {
