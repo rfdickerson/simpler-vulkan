@@ -32,10 +32,8 @@ Manages a texture atlas for font glyphs:
 
 - **`createAtlasSampler()`**: Creates a VkSampler for the atlas texture
 
-### 3. Example Usage
-See `src/main.cpp` for practical helpers:
-
-- **`buildTextVertices()`**: Converts shaped glyphs into draw-ready quads
+### 3. `src/text_renderer.hpp`
+Defines the `TextRenderer` helper that ties together shaping, atlas management, vertex uploads, and draw commands.
 
 ## Quick Start
 
@@ -166,21 +164,19 @@ add_executable (CMakeProject7
 
 ## Example Rendering Flow
 
-The snippet below illustrates how to combine `GlyphAtlas`, HarfBuzz shaping, and the `buildTextVertices()` helper from `src/main.cpp`:
+The snippet below illustrates how to prepare and draw screen text with the new `TextRenderer` abstraction:
 
 ```cpp
-GlyphAtlas atlas(device, 2048, 2048);
-atlas.loadFont("assets/fonts/EBGaramond-Regular.ttf", 48);
+TextRenderer textRenderer(device, swapchain, "assets/fonts/EBGaramond-Regular.ttf", 48);
 
-HbShaper shaper("assets/fonts/EBGaramond-Regular.ttf", 48);
-auto shapedGlyphs = shaper.shape_utf8("Hello, World!");
-for (const auto& glyph : shapedGlyphs) {
-    atlas.addGlyph(glyph.glyph_index);
-}
+// Shape and cache glyphs before finalizing the atlas
+textRenderer.setText("Hello, World!", 32.0f, 64.0f);
 
-VkCommandBuffer cmd = ...; // Command buffer used to upload glyphs
-atlas.finalizeAtlas(cmd);
+// Upload atlas & vertex data (staging buffer destroyed after submission)
+Buffer staging = textRenderer.finalizeAtlas(uploadCmd);
+textRenderer.uploadVertexData();
 
-auto vertices = buildTextVertices(shapedGlyphs, atlas, startX, startY);
+// Later, during rendering
+textRenderer.recordDraw(cmd, swapchain.extent, glm::vec4(1.0f));
 ```
 

@@ -11,11 +11,8 @@
 #include "device.hpp"
 #include "buffer.hpp"
 #include "window.hpp"
-#include "text.hpp"
-#include "glyph_atlas.hpp"
 #include "swapchain.hpp"
 #include "vulkan_pipeline_utils.hpp"
-#include "text_pipeline.hpp"
 #include "terrain_example.hpp"
 #include <glm/glm.hpp>
 #include "render_graph.hpp"
@@ -152,45 +149,6 @@ void destroyTrianglePipeline(Device& device, TrianglePipeline& pipeline) {
         vkDestroyPipelineLayout(device.device, pipeline.pipelineLayout, nullptr);
         pipeline.pipelineLayout = VK_NULL_HANDLE;
     }
-}
-
-// Helper function to build text vertex buffer from shaped glyphs
-std::vector<TextVertex> buildTextVertices(const std::vector<ShapedGlyph>& shapedGlyphs,
-                                         const GlyphAtlas& atlas,
-                                         float startX, float startY) {
-    std::vector<TextVertex> vertices;
-    float cursorX = startX;
-    float cursorY = startY;
-    
-    for (const auto& sg : shapedGlyphs) {
-        const GlyphInfo* info = atlas.getGlyphInfo(sg.glyph_index);
-        if (!info || info->width == 0 || info->height == 0) {
-            cursorX += sg.x_advance;
-            cursorY += sg.y_advance;
-            continue;
-        }
-        
-        float x = cursorX + sg.x_offset + info->bearingX;
-        float y = cursorY + sg.y_offset - info->bearingY;
-        float w = info->width;
-        float h = info->height;
-        
-        // Two triangles per glyph (6 vertices)
-        // Triangle 1: top-left, bottom-left, top-right
-        vertices.push_back({{x, y}, {info->uvX, info->uvY}});
-        vertices.push_back({{x, y + h}, {info->uvX, info->uvY + info->uvH}});
-        vertices.push_back({{x + w, y}, {info->uvX + info->uvW, info->uvY}});
-        
-        // Triangle 2: top-right, bottom-left, bottom-right
-        vertices.push_back({{x + w, y}, {info->uvX + info->uvW, info->uvY}});
-        vertices.push_back({{x, y + h}, {info->uvX, info->uvY + info->uvH}});
-        vertices.push_back({{x + w, y + h}, {info->uvX + info->uvW, info->uvY + info->uvH}});
-        
-        cursorX += sg.x_advance;
-        cursorY += sg.y_advance;
-    }
-    
-    return vertices;
 }
 
 int main() {
