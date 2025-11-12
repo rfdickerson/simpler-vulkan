@@ -33,7 +33,7 @@ Manages a texture atlas for font glyphs:
 - **`createAtlasSampler()`**: Creates a VkSampler for the atlas texture
 
 ### 3. `src/text_renderer.hpp`
-Defines the `TextRenderer` helper that ties together shaping, atlas management, vertex uploads, and draw commands.
+Defines the `TextRendererContext` data container and free functions for shaping text, uploading glyphs, and issuing draw commands.
 
 ## Quick Start
 
@@ -164,19 +164,22 @@ add_executable (CMakeProject7
 
 ## Example Rendering Flow
 
-The snippet below illustrates how to prepare and draw screen text with the new `TextRenderer` abstraction:
+The snippet below illustrates how to prepare and draw screen text with the data-oriented text rendering helpers:
 
 ```cpp
-TextRenderer textRenderer(device, swapchain, "assets/fonts/EBGaramond-Regular.ttf", 48);
+auto textCtx = createTextRenderer(device, swapchain, "assets/fonts/EBGaramond-Regular.ttf", 48);
 
 // Shape and cache glyphs before finalizing the atlas
-textRenderer.setText("Hello, World!", 32.0f, 64.0f);
+textRendererSetText(textCtx, "Hello, World!", 32.0f, 64.0f);
 
 // Upload atlas & vertex data (staging buffer destroyed after submission)
-Buffer staging = textRenderer.finalizeAtlas(uploadCmd);
-textRenderer.uploadVertexData();
+Buffer staging = textRendererFinalizeAtlas(textCtx, uploadCmd);
+textRendererUploadVertices(textCtx);
 
 // Later, during rendering
-textRenderer.recordDraw(cmd, swapchain.extent, glm::vec4(1.0f));
+textRendererRecordDraw(textCtx, cmd, swapchain.extent, glm::vec4(1.0f));
+
+// Cleanup when no longer needed
+destroyTextRenderer(textCtx);
 ```
 
