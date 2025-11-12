@@ -109,6 +109,8 @@ bool GlyphAtlas::addGlyph(uint32_t glyphIndex) {
 
     glyphMap_[glyphIndex] = info;
 
+    finalized_ = false;
+
     std::cout << "Added glyph " << glyphIndex 
               << " at (" << atlasX << ", " << atlasY << ") "
               << "size: " << bitmap.width << "x" << bitmap.rows << std::endl;
@@ -126,8 +128,8 @@ const GlyphInfo* GlyphAtlas::getGlyphInfo(uint32_t glyphIndex) const {
 
 Buffer GlyphAtlas::finalizeAtlas(VkCommandBuffer cmd) {
     if (finalized_) {
-        std::cerr << "Atlas already finalized!" << std::endl;
-        return Buffer{VK_NULL_HANDLE, nullptr};
+        destroyImage(device_, atlasImage_);
+        finalized_ = false;
     }
 
     // Create image

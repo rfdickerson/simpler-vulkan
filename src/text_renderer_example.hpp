@@ -5,6 +5,7 @@
 // This file demonstrates how to use the image.hpp and glyph_atlas.hpp
 // files to create a texture atlas for rendering text.
 
+#include "buffer.hpp"
 #include "device.hpp"
 #include "glyph_atlas.hpp"
 #include "text.hpp"
@@ -88,9 +89,12 @@ public:
     }
     
     // Finalize atlas (call after all text is prepared, before rendering)
-    void finalizeAtlas(VkCommandBuffer cmd) {
-        atlas_.finalizeAtlas(cmd);
-        sampler_ = createAtlasSampler(device_);
+    Buffer finalizeAtlas(VkCommandBuffer cmd) {
+        Buffer staging = atlas_.finalizeAtlas(cmd);
+        if (sampler_ == VK_NULL_HANDLE) {
+            sampler_ = createAtlasSampler(device_);
+        }
+        return staging;
     }
     
     // Get glyph info for rendering
@@ -101,6 +105,7 @@ public:
     // Get atlas resources for binding
     const Image& getAtlasImage() const { return atlas_.getAtlasImage(); }
     VkSampler getSampler() const { return sampler_; }
+    bool isAtlasFinalized() const { return atlas_.isFinalized() && sampler_ != VK_NULL_HANDLE; }
     
     ~TextRenderer() {
         if (sampler_ != VK_NULL_HANDLE) {

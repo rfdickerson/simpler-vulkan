@@ -17,14 +17,14 @@ struct TextPushConstants {
 };
 
 struct TextPipeline {
-    VkPipelineLayout pipelineLayout;
-    VkPipeline pipeline;
-    
-    VkDescriptorSetLayout descriptorSetLayout;
-    VkDescriptorPool descriptorPool;
-    VkDescriptorSet descriptorSet;
-    
-    VkCommandPool commandPool;
+    VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
+    VkPipeline pipeline{VK_NULL_HANDLE};
+
+    VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
+    VkDescriptorPool descriptorPool{VK_NULL_HANDLE};
+    std::vector<VkDescriptorSet> descriptorSets;
+
+    VkCommandPool commandPool{VK_NULL_HANDLE};
     std::vector<VkCommandBuffer> commandBuffers;
 };
 
@@ -32,10 +32,14 @@ struct TextPipeline {
 VkShaderModule loadShaderModule(Device& device, const char* filepath);
 
 // Create text rendering pipeline
-void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipeline);
+void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipeline,
+                        uint32_t maxDescriptorSets = 8);
+
+// Allocate descriptor set for a given atlas
+VkDescriptorSet allocateTextDescriptorSet(Device& device, TextPipeline& pipeline);
 
 // Update descriptor set with atlas texture
-void updateTextDescriptorSet(Device& device, TextPipeline& pipeline, 
+void updateTextDescriptorSet(Device& device, VkDescriptorSet descriptorSet,
                              VkImageView atlasView, VkSampler atlasSampler);
 
 // Create command buffers for rendering

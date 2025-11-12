@@ -40,7 +40,8 @@ VkShaderModule loadShaderModule(Device& device, const char* filepath) {
     return shaderModule;
 }
 
-void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipeline) {
+void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipeline,
+                        uint32_t maxDescriptorSets) {
     // Load shaders
     VkShaderModule vertShaderModule = loadShaderModule(device, "../shaders/text.vert.spv");
     VkShaderModule fragShaderModule = loadShaderModule(device, "../shaders/text.frag.spv");
@@ -221,33 +222,41 @@ void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipe
     // Create descriptor pool
     VkDescriptorPoolSize poolSize{};
     poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSize.descriptorCount = 1;
+    poolSize.descriptorCount = maxDescriptorSets;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = 1;
     poolInfo.pPoolSizes = &poolSize;
-    poolInfo.maxSets = 1;
+    poolInfo.maxSets = maxDescriptorSets;
 
     if (vkCreateDescriptorPool(device.device, &poolInfo, nullptr, &pipeline.descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create descriptor pool!");
     }
 
-    // Allocate descriptor set
+    pipeline.descriptorSets.clear();
+
+    std::cout << "Text rendering pipeline created successfully." << std::endl;
+}
+
+VkDescriptorSet allocateTextDescriptorSet(Device& device, TextPipeline& pipeline) {
+    VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = pipeline.descriptorPool;
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &pipeline.descriptorSetLayout;
 
-    if (vkAllocateDescriptorSets(device.device, &allocInfo, &pipeline.descriptorSet) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate descriptor sets!");
+    if (vkAllocateDescriptorSets(device.device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate text pipeline descriptor set");
     }
 
-    std::cout << "Text rendering pipeline created successfully." << std::endl;
+    pipeline.descriptorSets.push_back(descriptorSet);
+    return descriptorSet;
 }
 
-void updateTextDescriptorSet(Device& device, TextPipeline& pipeline,
+void updateTextDescriptorSet(Device& device, VkDescriptorSet descriptorSet,
                              VkImageView atlasView, VkSampler atlasSampler) {
     VkDescriptorImageInfo imageInfo{};
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -256,7 +265,7 @@ void updateTextDescriptorSet(Device& device, TextPipeline& pipeline,
 
     VkWriteDescriptorSet descriptorWrite{};
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = pipeline.descriptorSet;
+    descriptorWrite.dstSet = descriptorSet;
     descriptorWrite.dstBinding = 0;
     descriptorWrite.dstArrayElement = 0;
     descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;

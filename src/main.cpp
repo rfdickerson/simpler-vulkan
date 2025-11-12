@@ -1,4 +1,4 @@
-﻿#include <vulkan/vulkan.h>
+#include <vulkan/vulkan.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -12,13 +12,16 @@
 #include "buffer.hpp"
 #include "window.hpp"
 #include "text.hpp"
-#include "glyph_atlas.hpp"
 #include "swapchain.hpp"
 #include "text_pipeline.hpp"
 #include "terrain_example.hpp"
+#include "ui_renderer.hpp"
 #include <glm/glm.hpp>
 #include "render_graph.hpp"
 #include "hex_coord.hpp"
+
+#include <array>
+#include <cmath>
 
 // Colored vertex structure for the triangle
 struct ColoredVertex {
@@ -248,6 +251,9 @@ int main() {
         // Create terrain example
         std::unique_ptr<TerrainExample> terrainExample = std::make_unique<TerrainExample>(device, swapchain);
 
+        // Initialize UI renderer with HarfBuzz shaping and SDF atlas
+        ui::UiRenderer uiRenderer(device, swapchain, "assets/fonts/EBGaramond-Regular.ttf", 42);
+
         // Create command pool and buffers
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -277,6 +283,8 @@ int main() {
         // Time tracking for deltaTime
         auto lastFrameTime = std::chrono::high_resolution_clock::now();
 
+        float uiTimeline = 0.0f;
+
         // Main render loop
         while (!window.shouldClose()) {
             window.pollEvents();
@@ -285,6 +293,7 @@ int main() {
             auto currentFrameTime = std::chrono::high_resolution_clock::now();
             float deltaTime = std::chrono::duration<float>(currentFrameTime - lastFrameTime).count();
             lastFrameTime = currentFrameTime;
+            uiTimeline += deltaTime;
 
 			// Apply camera panning from middle-mouse drag
 			{
@@ -383,11 +392,128 @@ int main() {
                     static_cast<float>(swapchain.extent.height));
                 // Rebind dynamic image descriptors
                 terrainExample->rebindSsaoDescriptors();
+                uiRenderer.onSwapchainResized(swapchain);
                 framebufferResized = false;
             }
 
             // Update terrain scene
             terrainExample->update(deltaTime);
+
+            // Build UI for this frame
+            uiRenderer.beginFrame(swapchain.extent);
+
+            const ui::PanelStyle& basePanelStyle = uiRenderer.defaultPanelStyle();
+            const ui::ButtonStyle& baseButtonStyle = uiRenderer.defaultButtonStyle();
+            ui::LabelStyle baseLabelStyle = uiRenderer.defaultLabelStyle();
+
+            ui::PanelStyle topBarStyle = basePanelStyle;
+            topBarStyle.cornerRadius = 28.0f;
+            topBarStyle.shadow.spread = 34.0f;
+            topBarStyle.shadow.softness = 24.0f;
+            glm::vec2 topBarPos(40.0f, 32.0f);
+            glm::vec2 topBarSize(static_cast<float>(swapchain.extent.width) - 80.0f, 128.0f);
+            uiRenderer.drawPanel(topBarPos, topBarSize, topBarStyle);
+
+            ui::LabelStyle titleStyle = baseLabelStyle;
+            titleStyle.fontSize = 44.0f;
+            uiRenderer.drawLabel(topBarPos + glm::vec2(48.0f, 70.0f), "Empire of Aurelia", titleStyle, ui::TextAlign::Left);
+
+            ui::LabelStyle seasonStyle = baseLabelStyle;
+            seasonStyle.fontSize = 24.0f;
+            seasonStyle.color = glm::vec4(0.75f, 0.78f, 0.88f, 1.0f);
+            uiRenderer.drawLabel(topBarPos + glm::vec2(topBarSize.x - 220.0f, 48.0f),
+                                 "Autumn, 1550 ACR", seasonStyle, ui::TextAlign::Right);
+
+            ui::LabelStyle metricLabel = seasonStyle;
+            metricLabel.fontSize = 22.0f;
+            ui::LabelStyle metricValue = baseLabelStyle;
+            metricValue.fontSize = 30.0f;
+            metricValue.color = glm::vec4(0.96f, 0.86f, 0.60f, 1.0f);
+
+            std::array<std::pair<std::string, std::string>, 4> metrics = {{
+                {"Gold", "12.5k"},
+                {"Influence", "+38"},
+                {"Manpower", "48.2k"},
+                {"Stability", "+2"}
+            }};
+            float metricStride = (topBarSize.x - 320.0f) / static_cast<float>(metrics.size());
+            for (size_t i = 0; i < metrics.size(); ++i) {
+                float anchorX = topBarPos.x + 320.0f + metricStride * static_cast<float>(i);
+                uiRenderer.drawLabel(glm::vec2(anchorX, topBarPos.y + 58.0f),
+                                     metrics[i].first, metricLabel, ui::TextAlign::Center);
+                uiRenderer.drawLabel(glm::vec2(anchorX, topBarPos.y + 92.0f),
+                                     metrics[i].second, metricValue, ui::TextAlign::Center);
+            }
+
+            ui::PanelStyle councilPanel = basePanelStyle;
+            councilPanel.fillColor = glm::vec4(0.09f, 0.10f, 0.15f, 0.94f);
+            councilPanel.cornerRadius = 26.0f;
+            councilPanel.shadow.offset = glm::vec2(0.0f, 12.0f);
+            councilPanel.shadow.softness = 18.0f;
+            councilPanel.shadow.opacity = 0.48f;
+            glm::vec2 councilPos(40.0f, 196.0f);
+            glm::vec2 councilSize(420.0f, static_cast<float>(swapchain.extent.height) - 280.0f);
+            uiRenderer.drawPanel(councilPos, councilSize, councilPanel);
+
+            ui::LabelStyle councilHeader = baseLabelStyle;
+            councilHeader.fontSize = 32.0f;
+            uiRenderer.drawLabel(councilPos + glm::vec2(36.0f, 72.0f), "Imperial Council", councilHeader);
+
+            ui::LabelStyle councilEntry = baseLabelStyle;
+            councilEntry.fontSize = 24.0f;
+            councilEntry.color = glm::vec4(0.82f, 0.82f, 0.88f, 1.0f);
+            std::array<std::string, 4> agenda = {
+                "• Charter the Southern Sea Company",
+                "• Fortify the Amberway frontier",
+                "• Commission royal academies (+3 science)",
+                "• Ratify the coastal trade pact"
+            };
+            for (size_t i = 0; i < agenda.size(); ++i) {
+                float y = councilPos.y + 128.0f + static_cast<float>(i) * 48.0f;
+                uiRenderer.drawLabel(glm::vec2(councilPos.x + 44.0f, y), agenda[i], councilEntry, ui::TextAlign::Left);
+            }
+
+            ui::PanelStyle eventPanel = basePanelStyle;
+            eventPanel.cornerRadius = 24.0f;
+            eventPanel.shadow.offset = glm::vec2(0.0f, 10.0f);
+            eventPanel.shadow.softness = 18.0f;
+            glm::vec2 eventPos(static_cast<float>(swapchain.extent.width) - 440.0f, 200.0f);
+            glm::vec2 eventSize(400.0f, 260.0f);
+            uiRenderer.drawPanel(eventPos, eventSize, eventPanel);
+
+            ui::LabelStyle eventHeader = baseLabelStyle;
+            eventHeader.fontSize = 30.0f;
+            uiRenderer.drawLabel(eventPos + glm::vec2(32.0f, 72.0f), "World Events", eventHeader);
+
+            ui::LabelStyle eventBody = baseLabelStyle;
+            eventBody.fontSize = 22.0f;
+            eventBody.color = glm::vec4(0.78f, 0.80f, 0.89f, 1.0f);
+            uiRenderer.drawLabel(eventPos + glm::vec2(32.0f, 124.0f),
+                                 "• Northern leagues consolidate trade power.", eventBody);
+            uiRenderer.drawLabel(eventPos + glm::vec2(32.0f, 164.0f),
+                                 "• Border tensions ease after envoy visit.", eventBody);
+            uiRenderer.drawLabel(eventPos + glm::vec2(32.0f, 204.0f),
+                                 "• Scholars propose a grand mapping expedition.", eventBody);
+
+            std::array<std::string, 3> actions = {"Issue Edict", "Raise Levies", "Negotiate Treaty"};
+            glm::vec2 buttonSize(260.0f, 90.0f);
+            float totalButtonsWidth = static_cast<float>(actions.size()) * buttonSize.x +
+                                      static_cast<float>(actions.size() - 1) * 28.0f;
+            float buttonStartX = (static_cast<float>(swapchain.extent.width) - totalButtonsWidth) * 0.5f;
+            float buttonY = static_cast<float>(swapchain.extent.height) - 140.0f;
+            size_t highlightIndex = static_cast<size_t>(std::fmod(uiTimeline * 0.5f, static_cast<float>(actions.size())));
+            for (size_t i = 0; i < actions.size(); ++i) {
+                glm::vec2 pos(buttonStartX + static_cast<float>(i) * (buttonSize.x + 28.0f), buttonY);
+                bool hovered = (i == highlightIndex);
+                bool pressed = hovered && std::fmod(uiTimeline, 1.2f) > 0.9f;
+                uiRenderer.drawButton(pos, buttonSize, actions[i], baseButtonStyle, hovered, pressed, true);
+            }
+
+            ui::LabelStyle footerStyle = baseLabelStyle;
+            footerStyle.fontSize = 20.0f;
+            footerStyle.color = glm::vec4(0.78f, 0.82f, 0.92f, 1.0f);
+            uiRenderer.drawLabel(glm::vec2(48.0f, static_cast<float>(swapchain.extent.height) - 56.0f),
+                                 "Next harvest festival in 23 days • War exhaustion 12%", footerStyle, ui::TextAlign::Left);
 
             // Acquire next image
             if (!acquireNextImage(device, swapchain)) {
@@ -398,6 +524,7 @@ int main() {
                     static_cast<float>(swapchain.extent.height));
                 // Rebind dynamic image descriptors
                 terrainExample->rebindSsaoDescriptors();
+                uiRenderer.onSwapchainResized(swapchain);
                 continue;
             }
 
@@ -516,6 +643,24 @@ int main() {
             };
 
             graph.addPass(tiltPass);
+
+            // UI overlay pass - composited last onto swapchain image
+            RenderAttachment uiAtt{};
+            uiAtt.extent = swapchain.extent;
+            uiAtt.samples = VK_SAMPLE_COUNT_1_BIT;
+            uiAtt.colorFormat = swapchain.format;
+            uiAtt.colorView = swapchain.images[swapchain.currentImageIndex].view;
+            uiAtt.colorImage = swapchain.images[swapchain.currentImageIndex].image;
+
+            RenderPassDesc uiPass{};
+            uiPass.name = "ui_overlay";
+            uiPass.attachments = uiAtt;
+            uiPass.colorLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+            uiPass.record = [&](VkCommandBuffer c) {
+                uiRenderer.flush(c);
+            };
+
+            graph.addPass(uiPass);
             graph.execute();
             graph.endFrame();
 
