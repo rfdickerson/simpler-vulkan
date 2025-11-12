@@ -1,32 +1,17 @@
 #include "terrain_pipeline.hpp"
-#include "text_pipeline.hpp"
+#include "vulkan_pipeline_utils.hpp"
 #include "hex_mesh.hpp"
 
 #include <iostream>
-#include <fstream>
 #include <stdexcept>
 #include <array>
+#include <vector>
 
 void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline& pipeline) {
-    // Load shaders
-    VkShaderModule vertShaderModule = loadShaderModule(device, "../shaders/terrain.vert.spv");
-    VkShaderModule fragShaderModule = loadShaderModule(device, "../shaders/terrain.frag.spv");
+    ShaderModule vertexShader(device, "../shaders/terrain.vert.spv");
+    ShaderModule fragmentShader(device, "../shaders/terrain.frag.spv");
+    ShaderModule depthFragmentShader(device, "../shaders/terrain_depth.frag.spv");
 
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
-
-    // Vertex input
     auto bindingDescription = HexMesh::getBindingDescription();
     auto attributeDescriptions = HexMesh::getAttributeDescriptions();
 
@@ -81,15 +66,10 @@ void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline
     colorBlending.pAttachments = &colorBlendAttachment;
 
     // Dynamic states
-    std::vector<VkDynamicState> dynamicStates = {
+    const std::vector<VkDynamicState> dynamicStates{
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR
     };
-
-    VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
 
     // Depth-stencil state for main pass (depth already written in prepass)
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
@@ -113,14 +93,8 @@ void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline
     bindings[1].descriptorCount = 1;
     bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 2;
-    layoutInfo.pBindings = bindings;
-
-    if (vkCreateDescriptorSetLayout(device.device, &layoutInfo, nullptr, &pipeline.descriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create terrain descriptor set layout!");
-    }
+    std::vector<VkDescriptorSetLayoutBinding> layoutBindings{bindings[0], bindings[1]};
+    pipeline.descriptorSetLayout = createDescriptorSetLayout(device, layoutBindings, "terrain pipeline layout");
 
     // Push constants
     VkPushConstantRange pushConstantRange{};
@@ -142,74 +116,54 @@ void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline
 
     // Dynamic rendering info
     VkFormat colorFormat = swapchain.format;
-    VkPipelineRenderingCreateInfo renderingInfo{};
-    renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachmentFormats = &colorFormat;
-    renderingInfo.depthAttachmentFormat = swapchain.depthFormat;
+    VkPipelineRenderingCreateInfo mainRendering{};
+    mainRendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    mainRendering.colorAttachmentCount = 1;
+    mainRendering.pColorAttachmentFormats = &colorFormat;
+    mainRendering.depthAttachmentFormat = swapchain.depthFormat;
 
-    // Create graphics pipeline
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.pNext = &renderingInfo;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.pDepthStencilState = &depthStencil;
-    pipelineInfo.layout = pipeline.pipelineLayout;
-    pipelineInfo.renderPass = VK_NULL_HANDLE;
-    pipelineInfo.subpass = 0;
+    GraphicsPipelineBuilder mainPipelineBuilder;
+    mainPipelineBuilder.addStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT)
+                      .addStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
+                      .setVertexInput(vertexInputInfo)
+                      .setInputAssembly(inputAssembly)
+                      .setViewport(viewportState)
+                      .setRasterization(rasterizer)
+                      .setMultisample(multisampling)
+                      .setColorBlend(colorBlending)
+                      .setDepthStencil(depthStencil)
+                      .setDynamicStates(dynamicStates)
+                      .setRenderingInfo(mainRendering);
 
-    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline.pipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create terrain graphics pipeline!");
-    }
+    pipeline.pipeline = mainPipelineBuilder.build(device, pipeline.pipelineLayout, "terrain graphics pipeline");
 
-    // Create depth-only pipeline for prepass
-    // Load depth-only fragment shader
-    VkShaderModule depthFragShaderModule = loadShaderModule(device, "../shaders/terrain_depth.frag.spv");
-    
-    VkPipelineShaderStageCreateInfo depthFragShaderStageInfo{};
-    depthFragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    depthFragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    depthFragShaderStageInfo.module = depthFragShaderModule;
-    depthFragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo depthOnlyShaderStages[] = {vertShaderStageInfo, depthFragShaderStageInfo};
-
-    // Depth stencil state for depth prepass (write depth)
     VkPipelineDepthStencilStateCreateInfo depthOnlyDepthStencil{};
     depthOnlyDepthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthOnlyDepthStencil.depthTestEnable = VK_TRUE;
-    depthOnlyDepthStencil.depthWriteEnable = VK_TRUE; // Write depth in prepass
+    depthOnlyDepthStencil.depthWriteEnable = VK_TRUE;
     depthOnlyDepthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
     depthOnlyDepthStencil.depthBoundsTestEnable = VK_FALSE;
     depthOnlyDepthStencil.stencilTestEnable = VK_FALSE;
 
-    VkPipelineRenderingCreateInfo depthOnlyRenderingInfo{};
-    depthOnlyRenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    depthOnlyRenderingInfo.colorAttachmentCount = 0; // No color attachments
-    depthOnlyRenderingInfo.pColorAttachmentFormats = nullptr;
-    depthOnlyRenderingInfo.depthAttachmentFormat = swapchain.depthFormat;
+    VkPipelineRenderingCreateInfo depthRendering{};
+    depthRendering.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+    depthRendering.colorAttachmentCount = 0;
+    depthRendering.pColorAttachmentFormats = nullptr;
+    depthRendering.depthAttachmentFormat = swapchain.depthFormat;
 
-    VkGraphicsPipelineCreateInfo depthOnlyPipelineInfo = pipelineInfo;
-    depthOnlyPipelineInfo.pNext = &depthOnlyRenderingInfo;
-    depthOnlyPipelineInfo.pStages = depthOnlyShaderStages; // Use depth-only fragment shader
-    depthOnlyPipelineInfo.pDepthStencilState = &depthOnlyDepthStencil; // Use depth-writing state
+    GraphicsPipelineBuilder depthPipelineBuilder;
+    depthPipelineBuilder.addStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT)
+                        .addStage(depthFragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
+                        .setVertexInput(vertexInputInfo)
+                        .setInputAssembly(inputAssembly)
+                        .setViewport(viewportState)
+                        .setRasterization(rasterizer)
+                        .setMultisample(multisampling)
+                        .setDepthStencil(depthOnlyDepthStencil)
+                        .setDynamicStates(dynamicStates)
+                        .setRenderingInfo(depthRendering);
 
-    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &depthOnlyPipelineInfo, nullptr, &pipeline.depthOnlyPipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create terrain depth-only pipeline!");
-    }
-
-    // Cleanup shader modules
-    vkDestroyShaderModule(device.device, vertShaderModule, nullptr);
-    vkDestroyShaderModule(device.device, fragShaderModule, nullptr);
-    vkDestroyShaderModule(device.device, depthFragShaderModule, nullptr);
+    pipeline.depthOnlyPipeline = depthPipelineBuilder.build(device, pipeline.pipelineLayout, "terrain depth-only pipeline");
 
     // Create uniform buffer
     VkBufferCreateInfo bufferInfo{};
@@ -231,32 +185,12 @@ void createTerrainPipeline(Device& device, Swapchain& swapchain, TerrainPipeline
     pipeline.uniformMapped = allocInfoResult.pMappedData;
 
     // Create descriptor pool
-    VkDescriptorPoolSize poolSizes[2]{};
-    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = 1;
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = 1;
-
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 2;
-    poolInfo.pPoolSizes = poolSizes;
-    poolInfo.maxSets = 1;
-
-    if (vkCreateDescriptorPool(device.device, &poolInfo, nullptr, &pipeline.descriptorPool) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create terrain descriptor pool!");
-    }
-
-    // Allocate descriptor set
-    VkDescriptorSetAllocateInfo allocInfoDesc{};
-    allocInfoDesc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfoDesc.descriptorPool = pipeline.descriptorPool;
-    allocInfoDesc.descriptorSetCount = 1;
-    allocInfoDesc.pSetLayouts = &pipeline.descriptorSetLayout;
-
-    if (vkAllocateDescriptorSets(device.device, &allocInfoDesc, &pipeline.descriptorSet) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate terrain descriptor set!");
-    }
+    std::vector<VkDescriptorPoolSize> poolSizesVec{
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}
+    };
+    pipeline.descriptorPool = createDescriptorPool(device, poolSizesVec, 1, "terrain pipeline");
+    pipeline.descriptorSet = allocateDescriptorSet(device, pipeline.descriptorPool, pipeline.descriptorSetLayout, "terrain pipeline");
 
     // Update descriptor set (binding 0: UBO). SSAO (binding 1) updated separately.
     VkDescriptorBufferInfo bufferInfoDesc{};

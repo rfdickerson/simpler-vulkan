@@ -28,9 +28,6 @@ struct TextPipeline {
     std::vector<VkCommandBuffer> commandBuffers;
 };
 
-// Load shader module from SPIR-V file
-VkShaderModule loadShaderModule(Device& device, const char* filepath);
-
 // Create text rendering pipeline
 void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipeline);
 

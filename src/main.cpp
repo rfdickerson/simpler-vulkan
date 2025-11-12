@@ -1,4 +1,4 @@
-﻿#include <vulkan/vulkan.h>
+#include <vulkan/vulkan.h>
 
 #include <iostream>
 #include <stdexcept>
@@ -11,10 +11,8 @@
 #include "device.hpp"
 #include "buffer.hpp"
 #include "window.hpp"
-#include "text.hpp"
-#include "glyph_atlas.hpp"
 #include "swapchain.hpp"
-#include "text_pipeline.hpp"
+#include "vulkan_pipeline_utils.hpp"
 #include "terrain_example.hpp"
 #include <glm/glm.hpp>
 #include "render_graph.hpp"
@@ -34,23 +32,8 @@ struct TrianglePipeline {
 
 // Create triangle rendering pipeline
 void createTrianglePipeline(Device& device, Swapchain& swapchain, TrianglePipeline& pipeline) {
-    // Load shaders
-    VkShaderModule vertShaderModule = loadShaderModule(device, "../shaders/triangle.vert.spv");
-    VkShaderModule fragShaderModule = loadShaderModule(device, "../shaders/triangle.frag.spv");
-
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+    ShaderModule vertexShader(device, "../shaders/triangle.vert.spv");
+    ShaderModule fragmentShader(device, "../shaders/triangle.frag.spv");
 
     // Vertex input
     VkVertexInputBindingDescription bindingDescription{};
@@ -118,15 +101,10 @@ void createTrianglePipeline(Device& device, Swapchain& swapchain, TrianglePipeli
     colorBlending.pAttachments = &colorBlendAttachment;
 
     // Dynamic states
-    std::vector<VkDynamicState> dynamicStates = {
+    const std::vector<VkDynamicState> dynamicStates{
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR
     };
-
-    VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
 
     // Pipeline layout (no descriptors or push constants needed)
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
@@ -145,30 +123,19 @@ void createTrianglePipeline(Device& device, Swapchain& swapchain, TrianglePipeli
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachmentFormats = &colorFormat;
 
-    // Create graphics pipeline
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.pNext = &renderingInfo;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = pipeline.pipelineLayout;
-    pipelineInfo.renderPass = VK_NULL_HANDLE;
-    pipelineInfo.subpass = 0;
+    GraphicsPipelineBuilder builder;
+    builder.addStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT)
+           .addStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
+           .setVertexInput(vertexInputInfo)
+           .setInputAssembly(inputAssembly)
+           .setViewport(viewportState)
+           .setRasterization(rasterizer)
+           .setMultisample(multisampling)
+           .setColorBlend(colorBlending)
+           .setDynamicStates(dynamicStates)
+           .setRenderingInfo(renderingInfo);
 
-    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline.pipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create triangle graphics pipeline!");
-    }
-
-    // Cleanup shader modules
-    vkDestroyShaderModule(device.device, vertShaderModule, nullptr);
-    vkDestroyShaderModule(device.device, fragShaderModule, nullptr);
+    pipeline.pipeline = builder.build(device, pipeline.pipelineLayout, "triangle graphics pipeline");
 
     std::cout << "Triangle pipeline created successfully." << std::endl;
 }
@@ -182,45 +149,6 @@ void destroyTrianglePipeline(Device& device, TrianglePipeline& pipeline) {
         vkDestroyPipelineLayout(device.device, pipeline.pipelineLayout, nullptr);
         pipeline.pipelineLayout = VK_NULL_HANDLE;
     }
-}
-
-// Helper function to build text vertex buffer from shaped glyphs
-std::vector<TextVertex> buildTextVertices(const std::vector<ShapedGlyph>& shapedGlyphs,
-                                         const GlyphAtlas& atlas,
-                                         float startX, float startY) {
-    std::vector<TextVertex> vertices;
-    float cursorX = startX;
-    float cursorY = startY;
-    
-    for (const auto& sg : shapedGlyphs) {
-        const GlyphInfo* info = atlas.getGlyphInfo(sg.glyph_index);
-        if (!info || info->width == 0 || info->height == 0) {
-            cursorX += sg.x_advance;
-            cursorY += sg.y_advance;
-            continue;
-        }
-        
-        float x = cursorX + sg.x_offset + info->bearingX;
-        float y = cursorY + sg.y_offset - info->bearingY;
-        float w = info->width;
-        float h = info->height;
-        
-        // Two triangles per glyph (6 vertices)
-        // Triangle 1: top-left, bottom-left, top-right
-        vertices.push_back({{x, y}, {info->uvX, info->uvY}});
-        vertices.push_back({{x, y + h}, {info->uvX, info->uvY + info->uvH}});
-        vertices.push_back({{x + w, y}, {info->uvX + info->uvW, info->uvY}});
-        
-        // Triangle 2: top-right, bottom-left, bottom-right
-        vertices.push_back({{x + w, y}, {info->uvX + info->uvW, info->uvY}});
-        vertices.push_back({{x, y + h}, {info->uvX, info->uvY + info->uvH}});
-        vertices.push_back({{x + w, y + h}, {info->uvX + info->uvW, info->uvY + info->uvH}});
-        
-        cursorX += sg.x_advance;
-        cursorY += sg.y_advance;
-    }
-    
-    return vertices;
 }
 
 int main() {

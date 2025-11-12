@@ -1,28 +1,13 @@
 #include "tiltshift_pipeline.hpp"
-#include "text_pipeline.hpp"
+#include "vulkan_pipeline_utils.hpp"
 
 #include <stdexcept>
+#include <vector>
 
 void createTiltShiftPipeline(Device& device, Swapchain& swapchain, TiltShiftPipeline& pipeline) {
-    // Shaders
-    VkShaderModule vertShaderModule = loadShaderModule(device, "../shaders/tiltshift.vert.spv");
-    VkShaderModule fragShaderModule = loadShaderModule(device, "../shaders/tiltshift.frag.spv");
+    ShaderModule vertexShader(device, "../shaders/tiltshift.vert.spv");
+    ShaderModule fragmentShader(device, "../shaders/tiltshift.frag.spv");
 
-    VkPipelineShaderStageCreateInfo vertStage{};
-    vertStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertStage.module = vertShaderModule;
-    vertStage.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragStage{};
-    fragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragStage.module = fragShaderModule;
-    fragStage.pName = "main";
-
-    VkPipelineShaderStageCreateInfo stages[] = {vertStage, fragStage};
-
-    // Fullscreen triangle, no vertex buffers
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
@@ -56,11 +41,7 @@ void createTiltShiftPipeline(Device& device, Swapchain& swapchain, TiltShiftPipe
     cb.attachmentCount = 1;
     cb.pAttachments = &cbAtt;
 
-    std::vector<VkDynamicState> dynamics = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-    VkPipelineDynamicStateCreateInfo dyn{};
-    dyn.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dyn.dynamicStateCount = static_cast<uint32_t>(dynamics.size());
-    dyn.pDynamicStates = dynamics.data();
+    const std::vector<VkDynamicState> dynamics{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
     VkPipelineDepthStencilStateCreateInfo ds{};
     ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -79,13 +60,8 @@ void createTiltShiftPipeline(Device& device, Swapchain& swapchain, TiltShiftPipe
     bindings[1].descriptorCount = 1;
     bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    VkDescriptorSetLayoutCreateInfo dslInfo{};
-    dslInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    dslInfo.bindingCount = 2;
-    dslInfo.pBindings = bindings;
-    if (vkCreateDescriptorSetLayout(device.device, &dslInfo, nullptr, &pipeline.descriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create TiltShift descriptor set layout");
-    }
+    std::vector<VkDescriptorSetLayoutBinding> layoutBindings{bindings[0], bindings[1]};
+    pipeline.descriptorSetLayout = createDescriptorSetLayout(device, layoutBindings, "tiltshift pipeline layout");
 
     // Push constants
     VkPushConstantRange pcr{};
@@ -110,55 +86,30 @@ void createTiltShiftPipeline(Device& device, Swapchain& swapchain, TiltShiftPipe
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachmentFormats = &colorFormat;
 
-    VkGraphicsPipelineCreateInfo gp{};
-    gp.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    gp.pNext = &renderingInfo;
-    gp.stageCount = 2;
-    gp.pStages = stages;
-    gp.pVertexInputState = &vertexInput;
-    gp.pInputAssemblyState = &ia;
-    gp.pViewportState = &vp;
-    gp.pRasterizationState = &rs;
-    gp.pMultisampleState = &ms;
-    gp.pColorBlendState = &cb;
-    gp.pDynamicState = &dyn;
-    gp.pDepthStencilState = &ds;
-    gp.layout = pipeline.pipelineLayout;
-    gp.renderPass = VK_NULL_HANDLE;
-    gp.subpass = 0;
+    GraphicsPipelineBuilder builder;
+    builder.addStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT)
+           .addStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
+           .setVertexInput(vertexInput)
+           .setInputAssembly(ia)
+           .setViewport(vp)
+           .setRasterization(rs)
+           .setMultisample(ms)
+           .setColorBlend(cb)
+           .setDepthStencil(ds)
+           .setDynamicStates(dynamics)
+           .setRenderingInfo(renderingInfo);
 
-    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &gp, nullptr, &pipeline.pipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create TiltShift graphics pipeline");
-    }
+    pipeline.pipeline = builder.build(device, pipeline.pipelineLayout, "tiltshift graphics pipeline");
 
     // Descriptor pool and allocate set
-    VkDescriptorPoolSize poolSizes[1]{};
-    poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[0].descriptorCount = 2;
-
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = poolSizes;
-    poolInfo.maxSets = 1;
-    if (vkCreateDescriptorPool(device.device, &poolInfo, nullptr, &pipeline.descriptorPool) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create TiltShift descriptor pool");
-    }
-
-    VkDescriptorSetAllocateInfo alloc{};
-    alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    alloc.descriptorPool = pipeline.descriptorPool;
-    alloc.descriptorSetCount = 1;
-    alloc.pSetLayouts = &pipeline.descriptorSetLayout;
-    if (vkAllocateDescriptorSets(device.device, &alloc, &pipeline.descriptorSet) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate TiltShift descriptor set");
-    }
+    std::vector<VkDescriptorPoolSize> poolSizes = {
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2}
+    };
+    pipeline.descriptorPool = createDescriptorPool(device, poolSizes, 1, "tiltshift pipeline");
+    pipeline.descriptorSet = allocateDescriptorSet(device, pipeline.descriptorPool, pipeline.descriptorSetLayout, "tiltshift pipeline");
 
     // Bind initial descriptors
     updateTiltShiftDescriptors(device, pipeline, swapchain);
-
-    vkDestroyShaderModule(device.device, vertShaderModule, nullptr);
-    vkDestroyShaderModule(device.device, fragShaderModule, nullptr);
 }
 
 void updateTiltShiftDescriptors(Device& device, TiltShiftPipeline& pipeline, Swapchain& swapchain) {

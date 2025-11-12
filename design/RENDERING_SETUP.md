@@ -153,7 +153,10 @@ auto shapedGlyphs = shaper.shape_utf8("Your text here");
 
 In `main.cpp`, line ~143:
 ```cpp
-std::vector<TextVertex> textVertices = buildTextVertices(shapedGlyphs, atlas, 50.0f, 300.0f);
+auto textCtx = createTextRenderer(device, swapchain, "assets/fonts/EBGaramond-Regular.ttf", 48);
+textRendererSetText(textCtx, "UI Label", 50.0f, 300.0f);
+Buffer staging = textRendererFinalizeAtlas(textCtx, uploadCmd);
+textRendererUploadVertices(textCtx);
 //                                                                      X      Y
 ```
 

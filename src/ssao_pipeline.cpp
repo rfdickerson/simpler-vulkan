@@ -1,28 +1,13 @@
 #include "ssao_pipeline.hpp"
-#include "text_pipeline.hpp"
+#include "vulkan_pipeline_utils.hpp"
 
 #include <stdexcept>
+#include <vector>
 
 void createSSAOPipeline(Device& device, Swapchain& swapchain, SSAOPipeline& pipeline) {
-    // Shaders
-    VkShaderModule vertShaderModule = loadShaderModule(device, "../shaders/ssao.vert.spv");
-    VkShaderModule fragShaderModule = loadShaderModule(device, "../shaders/ssao.frag.spv");
+    ShaderModule vertexShader(device, "../shaders/ssao.vert.spv");
+    ShaderModule fragmentShader(device, "../shaders/ssao.frag.spv");
 
-    VkPipelineShaderStageCreateInfo vertStage{};
-    vertStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertStage.module = vertShaderModule;
-    vertStage.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragStage{};
-    fragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragStage.module = fragShaderModule;
-    fragStage.pName = "main";
-
-    VkPipelineShaderStageCreateInfo stages[] = {vertStage, fragStage};
-
-    // Fullscreen triangle, no vertex buffers
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
@@ -55,11 +40,7 @@ void createSSAOPipeline(Device& device, Swapchain& swapchain, SSAOPipeline& pipe
     cb.attachmentCount = 1;
     cb.pAttachments = &cbAtt;
 
-    std::vector<VkDynamicState> dynamics = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-    VkPipelineDynamicStateCreateInfo dyn{};
-    dyn.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dyn.dynamicStateCount = static_cast<uint32_t>(dynamics.size());
-    dyn.pDynamicStates = dynamics.data();
+    const std::vector<VkDynamicState> dynamics{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
     VkPipelineDepthStencilStateCreateInfo ds{};
     ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -73,13 +54,8 @@ void createSSAOPipeline(Device& device, Swapchain& swapchain, SSAOPipeline& pipe
     depthBinding.descriptorCount = 1;
     depthBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    VkDescriptorSetLayoutCreateInfo dslInfo{};
-    dslInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    dslInfo.bindingCount = 1;
-    dslInfo.pBindings = &depthBinding;
-    if (vkCreateDescriptorSetLayout(device.device, &dslInfo, nullptr, &pipeline.descriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create SSAO descriptor set layout");
-    }
+    std::vector<VkDescriptorSetLayoutBinding> layoutBindings{depthBinding};
+    pipeline.descriptorSetLayout = createDescriptorSetLayout(device, layoutBindings, "ssao pipeline layout");
 
     // Push constants
     VkPushConstantRange pcr{};
@@ -104,55 +80,30 @@ void createSSAOPipeline(Device& device, Swapchain& swapchain, SSAOPipeline& pipe
     renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachmentFormats = &colorFormat;
 
-    VkGraphicsPipelineCreateInfo gp{};
-    gp.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    gp.pNext = &renderingInfo;
-    gp.stageCount = 2;
-    gp.pStages = stages;
-    gp.pVertexInputState = &vertexInput;
-    gp.pInputAssemblyState = &ia;
-    gp.pViewportState = &vp;
-    gp.pRasterizationState = &rs;
-    gp.pMultisampleState = &ms;
-    gp.pColorBlendState = &cb;
-    gp.pDynamicState = &dyn;
-    gp.pDepthStencilState = &ds;
-    gp.layout = pipeline.pipelineLayout;
-    gp.renderPass = VK_NULL_HANDLE;
-    gp.subpass = 0;
+    GraphicsPipelineBuilder builder;
+    builder.addStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT)
+           .addStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
+           .setVertexInput(vertexInput)
+           .setInputAssembly(ia)
+           .setViewport(vp)
+           .setRasterization(rs)
+           .setMultisample(ms)
+           .setColorBlend(cb)
+           .setDepthStencil(ds)
+           .setDynamicStates(dynamics)
+           .setRenderingInfo(renderingInfo);
 
-    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &gp, nullptr, &pipeline.pipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create SSAO graphics pipeline");
-    }
+    pipeline.pipeline = builder.build(device, pipeline.pipelineLayout, "SSAO graphics pipeline");
 
     // Descriptor pool and allocate set
-    VkDescriptorPoolSize poolSize{};
-    poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSize.descriptorCount = 1;
-
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &poolSize;
-    poolInfo.maxSets = 1;
-    if (vkCreateDescriptorPool(device.device, &poolInfo, nullptr, &pipeline.descriptorPool) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create SSAO descriptor pool");
-    }
-
-    VkDescriptorSetAllocateInfo alloc{};
-    alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    alloc.descriptorPool = pipeline.descriptorPool;
-    alloc.descriptorSetCount = 1;
-    alloc.pSetLayouts = &pipeline.descriptorSetLayout;
-    if (vkAllocateDescriptorSets(device.device, &alloc, &pipeline.descriptorSet) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate SSAO descriptor set");
-    }
+    std::vector<VkDescriptorPoolSize> poolSizes = {
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}
+    };
+    pipeline.descriptorPool = createDescriptorPool(device, poolSizes, 1, "ssao pipeline");
+    pipeline.descriptorSet = allocateDescriptorSet(device, pipeline.descriptorPool, pipeline.descriptorSetLayout, "ssao pipeline");
 
     // Bind depth now
     updateSSAODepthDescriptor(device, pipeline, swapchain);
-
-    vkDestroyShaderModule(device.device, vertShaderModule, nullptr);
-    vkDestroyShaderModule(device.device, fragShaderModule, nullptr);
 }
 
 void updateSSAODepthDescriptor(Device& device, SSAOPipeline& pipeline, Swapchain& swapchain) {

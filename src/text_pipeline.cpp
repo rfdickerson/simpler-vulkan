@@ -1,63 +1,16 @@
 #include "text_pipeline.hpp"
 #include "device.hpp"
+#include "vulkan_pipeline_utils.hpp"
 #include "swapchain.hpp"
 
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <array>
-
-static std::vector<char> readFile(const std::string& filename) {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-    if (!file.is_open()) {
-        throw std::runtime_error("Failed to open file: " + filename);
-    }
-
-    size_t fileSize = (size_t)file.tellg();
-    std::vector<char> buffer(fileSize);
-
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
-
-    return buffer;
-}
-
-VkShaderModule loadShaderModule(Device& device, const char* filepath) {
-    auto code = readFile(filepath);
-
-    VkShaderModuleCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.codeSize = code.size();
-    createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-    VkShaderModule shaderModule;
-    if (vkCreateShaderModule(device.device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create shader module!");
-    }
-
-    return shaderModule;
-}
+#include <vector>
 
 void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipeline) {
-    // Load shaders
-    VkShaderModule vertShaderModule = loadShaderModule(device, "../shaders/text.vert.spv");
-    VkShaderModule fragShaderModule = loadShaderModule(device, "../shaders/text.frag.spv");
-
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+    ShaderModule vertexShader(device, "../shaders/text.vert.spv");
+    ShaderModule fragmentShader(device, "../shaders/text.frag.spv");
 
     // Vertex input
     VkVertexInputBindingDescription bindingDescription{};
@@ -130,16 +83,10 @@ void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipe
     colorBlending.attachmentCount = 1;
     colorBlending.pAttachments = &colorBlendAttachment;
 
-    // Dynamic states
-    std::vector<VkDynamicState> dynamicStates = {
+    const std::vector<VkDynamicState> dynamicStates{
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR
     };
-
-    VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
 
     // Depth-stencil (text does not write depth by default)
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
@@ -157,14 +104,8 @@ void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipe
     samplerLayoutBinding.descriptorCount = 1;
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 1;
-    layoutInfo.pBindings = &samplerLayoutBinding;
-
-    if (vkCreateDescriptorSetLayout(device.device, &layoutInfo, nullptr, &pipeline.descriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create descriptor set layout!");
-    }
+    std::vector<VkDescriptorSetLayoutBinding> layoutBindings{samplerLayoutBinding};
+    pipeline.descriptorSetLayout = createDescriptorSetLayout(device, layoutBindings, "text pipeline layout");
 
     // Push constants
     VkPushConstantRange pushConstantRange{};
@@ -192,57 +133,26 @@ void createTextPipeline(Device& device, Swapchain& swapchain, TextPipeline& pipe
     renderingInfo.pColorAttachmentFormats = &colorFormat;
     renderingInfo.depthAttachmentFormat = swapchain.depthFormat;
 
-    // Create graphics pipeline
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.pNext = &renderingInfo;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.pDepthStencilState = &depthStencil;
-    pipelineInfo.layout = pipeline.pipelineLayout;
-    pipelineInfo.renderPass = VK_NULL_HANDLE; // Using dynamic rendering
-    pipelineInfo.subpass = 0;
+    GraphicsPipelineBuilder builder;
+    builder.addStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT)
+           .addStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT)
+           .setVertexInput(vertexInputInfo)
+           .setInputAssembly(inputAssembly)
+           .setViewport(viewportState)
+           .setRasterization(rasterizer)
+           .setMultisample(multisampling)
+           .setColorBlend(colorBlending)
+           .setDepthStencil(depthStencil)
+           .setDynamicStates(dynamicStates)
+           .setRenderingInfo(renderingInfo);
 
-    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline.pipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create graphics pipeline!");
-    }
+    pipeline.pipeline = builder.build(device, pipeline.pipelineLayout, "text graphics pipeline");
 
-    // Cleanup shader modules
-    vkDestroyShaderModule(device.device, vertShaderModule, nullptr);
-    vkDestroyShaderModule(device.device, fragShaderModule, nullptr);
-
-    // Create descriptor pool
-    VkDescriptorPoolSize poolSize{};
-    poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSize.descriptorCount = 1;
-
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes = &poolSize;
-    poolInfo.maxSets = 1;
-
-    if (vkCreateDescriptorPool(device.device, &poolInfo, nullptr, &pipeline.descriptorPool) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create descriptor pool!");
-    }
-
-    // Allocate descriptor set
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = pipeline.descriptorPool;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &pipeline.descriptorSetLayout;
-
-    if (vkAllocateDescriptorSets(device.device, &allocInfo, &pipeline.descriptorSet) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate descriptor sets!");
-    }
+    std::vector<VkDescriptorPoolSize> poolSizes = {
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}
+    };
+    pipeline.descriptorPool = createDescriptorPool(device, poolSizes, 1, "text pipeline");
+    pipeline.descriptorSet = allocateDescriptorSet(device, pipeline.descriptorPool, pipeline.descriptorSetLayout, "text pipeline");
 
     std::cout << "Text rendering pipeline created successfully." << std::endl;
 }

@@ -32,11 +32,8 @@ Manages a texture atlas for font glyphs:
 
 - **`createAtlasSampler()`**: Creates a VkSampler for the atlas texture
 
-### 3. `src/text_renderer_example.hpp`
-Provides example usage and helper classes:
-
-- **`TextRenderer` class**: Complete example showing how to use the atlas
-- **`buildTextQuads()`**: Helper to generate rendering quads from shaped text
+### 3. `src/text_renderer.hpp`
+Defines the `TextRendererContext` data container and free functions for shaping text, uploading glyphs, and issuing draw commands.
 
 ## Quick Start
 
@@ -165,26 +162,24 @@ add_executable (CMakeProject7
 4. Write vertex and fragment shaders
 5. Implement text rendering pipeline
 
-## Example with TextRenderer Class
+## Example Rendering Flow
 
-See `src/text_renderer_example.hpp` for a complete `TextRenderer` class that:
-- Manages atlas lifecycle
-- Integrates with HarfBuzz
-- Provides helper functions for quad generation
-- Handles sampler creation
+The snippet below illustrates how to prepare and draw screen text with the data-oriented text rendering helpers:
 
 ```cpp
-TextRenderer renderer(device, "assets/fonts/EBGaramond-Regular.ttf", 48);
+auto textCtx = createTextRenderer(device, swapchain, "assets/fonts/EBGaramond-Regular.ttf", 48);
 
-// Prepare text (shapes and adds glyphs to atlas)
-auto shapedGlyphs = renderer.prepareText("Hello, World!");
+// Shape and cache glyphs before finalizing the atlas
+textRendererSetText(textCtx, "Hello, World!", 32.0f, 64.0f);
 
-// Finalize atlas
-VkCommandBuffer cmd = ...;
-renderer.finalizeAtlas(cmd);
+// Upload atlas & vertex data (staging buffer destroyed after submission)
+Buffer staging = textRendererFinalizeAtlas(textCtx, uploadCmd);
+textRendererUploadVertices(textCtx);
 
-// Use in rendering
-const Image& atlasImage = renderer.getAtlasImage();
-VkSampler sampler = renderer.getSampler();
+// Later, during rendering
+textRendererRecordDraw(textCtx, cmd, swapchain.extent, glm::vec4(1.0f));
+
+// Cleanup when no longer needed
+destroyTextRenderer(textCtx);
 ```
 
