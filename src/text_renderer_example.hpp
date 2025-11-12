@@ -74,6 +74,8 @@ public:
         
         // Initialize HarfBuzz shaper
         shaper_ = std::make_unique<HbShaper>(fontPath, fontSize);
+
+        preloadCommonGlyphs();
     }
     
     // Prepare text for rendering (shapes and ensures glyphs are in atlas)
@@ -86,6 +88,18 @@ public:
         }
         
         return shapedGlyphs;
+    }
+
+    void preloadCommonGlyphs() {
+        std::string basicLatin;
+        basicLatin.reserve(96);
+        for (char c = 32; c <= 126; ++c) {
+            basicLatin.push_back(c);
+        }
+        prepareText(basicLatin);
+
+        const std::string extras = u8"¡¿·•–—“”‘’…€£¥₤₿";
+        prepareText(extras);
     }
     
     // Finalize atlas (call after all text is prepared, before rendering)

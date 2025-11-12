@@ -43,8 +43,6 @@ UiRenderer::UiRenderer(Device& device, Swapchain& swapchain,
     vertexBufferSize_ = sizeof(TextVertex) * 65536;
     vertexBuffer_ = CreateVertexBuffer(device_, vertexBufferSize_);
 
-    preloadCommonGlyphs();
-
     // Configure default styles reminiscent of 4X strategy UI palettes
     defaultPanelStyle_.fillColor = glm::vec4(0.07f, 0.08f, 0.12f, 0.94f);
     defaultPanelStyle_.borderColor = glm::vec4(0.45f, 0.36f, 0.22f, 1.0f);
@@ -86,19 +84,6 @@ UiRenderer::~UiRenderer() {
     }
     destroyBuffer(device_, vertexBuffer_);
     destroyTextPipeline(device_, pipeline_);
-}
-
-void UiRenderer::preloadCommonGlyphs() {
-    static const std::string_view glyphSet =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz"
-        "0123456789"
-        "%/:,.!?+-"
-        "\xe2\x82\xac" // Euro symbol
-        "\xe2\x80\xa2"; // Bullet
-
-    textRenderer_.prepareText(std::string(glyphSet));
-    pendingAtlasUpload_ = true;
 }
 
 void UiRenderer::beginFrame(const VkExtent2D& extent) {

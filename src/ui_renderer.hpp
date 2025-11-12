@@ -119,8 +119,6 @@ private:
     TextMetrics computeTextMetrics(const std::vector<ShapedGlyph>& glyphs,
                                    float scale) const;
 
-    void preloadCommonGlyphs();
-
     Device& device_;
     Swapchain& swapchain_;
 
