@@ -16,8 +16,41 @@ find_package(Vulkan REQUIRED)
 add_compile_definitions(GLFW_INCLUDE_NONE)
 
 # Add source to this project's executable.
-add_executable (CMakeProject7 "src/main.cpp" "src/vma_impl.cpp" "src/device.cpp" "src/buffer.cpp" "src/window.cpp" "src/image.cpp" "src/glyph_atlas.cpp" "src/swapchain.cpp" "src/text_pipeline.cpp" "src/terrain_pipeline.cpp" "src/terrain_renderer.cpp" "src/tree_pipeline.cpp" "src/tree_renderer.cpp" "src/map_builder.cpp" "src/render_graph.cpp" "src/ssao_pipeline.cpp" "src/tiltshift_pipeline.cpp")
+add_library(terrain_engine STATIC
+    "src/vma_impl.cpp"
+    "src/device.cpp"
+    "src/buffer.cpp"
+    "src/window.cpp"
+    "src/image.cpp"
+    "src/glyph_atlas.cpp"
+    "src/swapchain.cpp"
+    "src/text_pipeline.cpp"
+    "src/terrain_pipeline.cpp"
+    "src/terrain_renderer.cpp"
+    "src/tree_pipeline.cpp"
+    "src/tree_renderer.cpp"
+    "src/map_builder.cpp"
+    "src/render_graph.cpp"
+    "src/ssao_pipeline.cpp"
+    "src/tiltshift_pipeline.cpp"
+    "src/terrain_application.cpp"
+    "src/camera_controller.cpp"
+    "src/frame_pass_builder.cpp"
+    "src/triangle_pipeline.cpp"
+)
 
-target_link_libraries(CMakeProject7 PRIVATE Vulkan::Vulkan GPUOpen::VulkanMemoryAllocator glfw harfbuzz::harfbuzz Freetype::Freetype glm::glm)
+target_link_libraries(terrain_engine
+    PUBLIC
+        Vulkan::Vulkan
+        GPUOpen::VulkanMemoryAllocator
+        glfw
+        harfbuzz::harfbuzz
+        Freetype::Freetype
+        glm::glm
+)
 
-target_precompile_headers(CMakeProject7 PRIVATE src/pch.hpp)
+target_precompile_headers(terrain_engine PUBLIC src/pch.hpp)
+
+add_executable (CMakeProject7 "src/main.cpp")
+
+target_link_libraries(CMakeProject7 PRIVATE terrain_engine)
