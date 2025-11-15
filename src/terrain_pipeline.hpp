@@ -14,13 +14,12 @@ struct TerrainPushConstants {
 
 // Uniform buffer for terrain parameters
 struct TerrainParamsUBO {
-    glm::vec3 sunDirection;
-    float padding1;
-    glm::vec3 sunColor;
-    float ambientIntensity;
-    float hexSize;
-    int32_t currentEra;
-    float padding2[2];
+    glm::vec4 sunDirSnow;        // xyz = sun direction, w = snow line threshold (0-1 in normalized elevation)
+    glm::vec4 sunColorAmbient;   // xyz = sun color, w = ambient intensity
+    glm::vec4 fieldScales;       // x = hex size, y = moisture noise scale, z = temperature noise scale, w = biome noise scale
+    glm::vec4 fieldBias;         // x = temperature lapse rate, y = moisture bias, z = slope rock strength, w = river rock bias
+    glm::vec4 elevationInfo;     // x = min elevation, y = max elevation, z = detail noise scale, w = unused/padding
+    glm::ivec4 eraInfo;          // x = current era index, remaining components unused
 };
 
 // Terrain pipeline structure
