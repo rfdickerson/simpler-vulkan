@@ -1,5 +1,8 @@
 #include "terrain_renderer.hpp"
+#include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <limits>
 
 TerrainRenderer::TerrainRenderer(Device& device, float hexSize)
     : device(device)
@@ -9,6 +12,8 @@ TerrainRenderer::TerrainRenderer(Device& device, float hexSize)
     , indexBuffer{VK_NULL_HANDLE, nullptr}
 {
     renderParams.hexSize = hexSize;
+    renderParams.minElevation = 0.0f;
+    renderParams.maxElevation = 1.0f;
 }
 
 TerrainRenderer::~TerrainRenderer() {
@@ -167,9 +172,9 @@ void TerrainRenderer::setTerrainHeight(const HexCoord& hex, float height) {
 
 void TerrainRenderer::rebuildMesh() {
     if (!meshDirty) return;
-    
+
     // Generate mesh for all tiles
-    mesh = HexMesh::generateHexGrid(tileOrder, hexSize, 
+    mesh = HexMesh::generateHexGrid(tileOrder, hexSize,
         [this](const HexCoord& hex) -> float {
             auto it = tiles.find(hex);
             return (it != tiles.end()) ? it->second.height : 0.0f;
@@ -178,7 +183,36 @@ void TerrainRenderer::rebuildMesh() {
             auto it = tiles.find(hex);
             return (it != tiles.end()) ? static_cast<uint32_t>(it->second.type) : 0;
         });
-    
+
+    float minHeight = std::numeric_limits<float>::max();
+    float maxHeight = std::numeric_limits<float>::lowest();
+    for (const auto& hex : tileOrder) {
+        auto it = tiles.find(hex);
+        if (it == tiles.end()) {
+            continue;
+        }
+        float h = it->second.height;
+        minHeight = std::min(minHeight, h);
+        maxHeight = std::max(maxHeight, h);
+    }
+
+    if (tileOrder.empty()) {
+        minHeight = 0.0f;
+        maxHeight = 0.0f;
+    }
+
+    if (minHeight > maxHeight) {
+        minHeight = 0.0f;
+        maxHeight = 0.0f;
+    }
+
+    if (std::abs(maxHeight - minHeight) < 1e-4f) {
+        maxHeight = minHeight + 1.0f;
+    }
+
+    renderParams.minElevation = minHeight;
+    renderParams.maxElevation = maxHeight;
+
     // Upload to GPU
     uploadMeshToGPU();
     
@@ -189,6 +223,7 @@ void TerrainRenderer::rebuildMesh() {
 
 void TerrainRenderer::updateRenderParams(const Camera& camera, float time) {
     renderParams.time = time;
+    renderParams.hexSize = hexSize;
     // Update other params as needed (sun direction, era, etc.)
 }
 

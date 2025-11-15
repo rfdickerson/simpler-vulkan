@@ -110,7 +110,18 @@ struct TerrainRenderParams {
     glm::vec3 sunDirection;    // Direction to sun (for lighting)
     glm::vec3 sunColor;        // Sun color
     float ambientIntensity;    // Ambient light intensity
-    
+    float snowLine;            // Normalized elevation threshold for snow blend
+    float moistureNoiseScale;  // Scale for procedural moisture field sampling
+    float temperatureNoiseScale; // Scale for procedural temperature noise
+    float biomeNoiseScale;     // General tiling scale for biome material sampling
+    float temperatureLapseRate;// How quickly temperature falls off with elevation
+    float moistureBias;        // Global bias applied to moisture field
+    float slopeRockStrength;   // Multiplier controlling how strongly slopes favor rock
+    float riverRockBias;       // How much rivers bias toward rock/sand mixes
+    float detailNoiseScale;    // Shared detail tiling for material sampling
+    float minElevation;        // Minimum tile elevation (world units)
+    float maxElevation;        // Maximum tile elevation (world units)
+
     TerrainRenderParams()
         : hexSize(1.0f)
         , time(0.0f)
@@ -118,6 +129,17 @@ struct TerrainRenderParams {
         , sunDirection(glm::normalize(glm::vec3(0.3f, -0.5f, 0.4f)))
         , sunColor(1.0f, 0.95f, 0.8f)
         , ambientIntensity(0.3f)
+        , snowLine(0.65f)
+        , moistureNoiseScale(0.0025f)
+        , temperatureNoiseScale(0.0015f)
+        , biomeNoiseScale(0.0040f)
+        , temperatureLapseRate(0.85f)
+        , moistureBias(0.0f)
+        , slopeRockStrength(0.75f)
+        , riverRockBias(0.35f)
+        , detailNoiseScale(3.5f)
+        , minElevation(0.0f)
+        , maxElevation(1.0f)
     {}
 };
 

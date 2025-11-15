@@ -83,12 +83,25 @@ public:
         // Update terrain uniform buffer
         TerrainParamsUBO params;
         auto& renderParams = terrainRenderer.getRenderParams();
-        params.sunDirection = renderParams.sunDirection;
-        params.sunColor = renderParams.sunColor;
-        params.ambientIntensity = renderParams.ambientIntensity;
-        params.hexSize = renderParams.hexSize;
-        params.currentEra = static_cast<int>(renderParams.currentEra);
-        
+        params.sunDirSnow = glm::vec4(renderParams.sunDirection, renderParams.snowLine);
+        params.sunColorAmbient = glm::vec4(renderParams.sunColor, renderParams.ambientIntensity);
+        params.fieldScales = glm::vec4(
+            renderParams.hexSize,
+            renderParams.moistureNoiseScale,
+            renderParams.temperatureNoiseScale,
+            renderParams.biomeNoiseScale);
+        params.fieldBias = glm::vec4(
+            renderParams.temperatureLapseRate,
+            renderParams.moistureBias,
+            renderParams.slopeRockStrength,
+            renderParams.riverRockBias);
+        params.elevationInfo = glm::vec4(
+            renderParams.minElevation,
+            renderParams.maxElevation,
+            renderParams.detailNoiseScale,
+            0.0f);
+        params.eraInfo = glm::ivec4(static_cast<int>(renderParams.currentEra), 0, 0, 0);
+
         updateTerrainParams(pipeline, params);
     }
     
