@@ -25,15 +25,15 @@ struct HexCoord {
         return !(*this == other);
     }
     
-    HexCoord operator+(const HexCoord& other) const {
+    constexpr HexCoord operator+(const HexCoord& other) const {
         return HexCoord(q + other.q, r + other.r);
     }
-    
-    HexCoord operator-(const HexCoord& other) const {
+
+    constexpr HexCoord operator-(const HexCoord& other) const {
         return HexCoord(q - other.q, r - other.r);
     }
-    
-    HexCoord operator*(int scale) const {
+
+    constexpr HexCoord operator*(const int scale) const {
         return HexCoord(q * scale, r * scale);
     }
 };

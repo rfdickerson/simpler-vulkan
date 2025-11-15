@@ -3,6 +3,8 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 
+namespace firmament {
+
 struct Device;
 struct Swapchain;
 
@@ -44,3 +46,5 @@ void createTextCommandBuffers(Device& device, TextPipeline& pipeline, uint32_t c
 // Cleanup pipeline
 void destroyTextPipeline(Device& device, TextPipeline& pipeline);
 
+
+} // namespace firmament

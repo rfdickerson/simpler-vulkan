@@ -2,6 +2,8 @@
 
 #include <glfw/glfw3.h>
 
+namespace firmament {
+
 struct Window {
     GLFWwindow* window{};
     int         width;
@@ -38,3 +40,4 @@ struct Window {
     bool consumeScrollDelta(float& outX, float& outY);
     bool isKeyDown(int key) const;
 };
+} // namespace firmament

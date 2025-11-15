@@ -6,6 +6,8 @@
 #include <iostream>
 #include <algorithm>
 
+namespace firmament {
+
 GlyphAtlas::GlyphAtlas(Device& device, uint32_t atlasWidth, uint32_t atlasHeight)
     : device_(device),
       ftLibrary_(nullptr),
@@ -204,3 +206,5 @@ VkSampler createAtlasSampler(Device& device) {
     return sampler;
 }
 
+
+} // namespace firmament

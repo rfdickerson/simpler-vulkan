@@ -3,11 +3,13 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
-#include "device.hpp"
-#include "buffer.hpp"
-#include "camera.hpp"
-#include "hex_coord.hpp"
-#include "hex_mesh.hpp"
+#include "firmament/device.hpp"
+#include "firmament/buffer.hpp"
+#include "firmament/camera.hpp"
+#include "firmament/hex_coord.hpp"
+#include "firmament/hex_mesh.hpp"
+
+using namespace firmament;
 #include "terrain.hpp"
 #include "terrain_pipeline.hpp"
 

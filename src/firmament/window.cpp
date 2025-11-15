@@ -1,5 +1,7 @@
 #include "window.hpp"
 
+namespace firmament {
+
 
 void Window::InitGLFW() {
     glfwInit();
@@ -123,3 +125,4 @@ bool Window::consumeScrollDelta(float& outX, float& outY) {
 bool Window::isKeyDown(int key) const {
     return glfwGetKey(window, key) == GLFW_PRESS;
 }
+} // namespace firmament

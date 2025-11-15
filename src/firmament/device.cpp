@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <vector>
 
+namespace firmament {
+
 void initVulkan(Device& device) {
     // Initialize Vulkan instance with required extensions
     VkApplicationInfo appInfo{};
@@ -176,3 +178,4 @@ void makeTimelineSemaphore(Device& device) {
     }
     std::cout << "Timeline semaphore created successfully." << std::endl;
 }
+} // namespace firmament

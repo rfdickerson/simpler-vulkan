@@ -3,6 +3,8 @@
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
 
+namespace firmament {
+
 struct Device {
 	VkInstance instance;
 	VkPhysicalDevice physicalDevice;
@@ -20,4 +22,6 @@ void makeTimelineSemaphore(Device& device);
 
 void cleanupVma(Device& device);
 void cleanupVulkan(Device& device);
+
+} // namespace firmament
 

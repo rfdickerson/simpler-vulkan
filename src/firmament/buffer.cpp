@@ -4,6 +4,8 @@
 
 #include <stdexcept>
 
+namespace firmament {
+
 // Create a Storage Buffer (SSBO) using VMA. The buffer is host-accessible for easy CPU writes.
 Buffer CreateSsboBuffer(Device& device, VkDeviceSize size) {
     Buffer buffer{};
@@ -61,3 +63,4 @@ void destroyBuffer(Device& device, Buffer& buffer) {
         buffer.allocation = nullptr;
     }
 }
+} // namespace firmament

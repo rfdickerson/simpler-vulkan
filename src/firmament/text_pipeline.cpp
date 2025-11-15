@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <array>
 
+namespace firmament {
+
 static std::vector<char> readFile(const std::string& filename) {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
@@ -318,3 +320,5 @@ void destroyTextPipeline(Device& device, TextPipeline& pipeline) {
     }
 }
 
+
+} // namespace firmament

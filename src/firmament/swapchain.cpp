@@ -11,6 +11,8 @@
 #include <limits>
 #include <stdexcept>
 
+namespace firmament {
+
 VkSurfaceKHR createSurface(VkInstance instance, Window& window) {
     VkSurfaceKHR surface;
     if (glfwCreateWindowSurface(instance, window.window, nullptr, &surface) != VK_SUCCESS) {
@@ -360,3 +362,5 @@ bool presentImage(Device& device, VkSurfaceKHR surface, Swapchain& swapchain) {
     return true;
 }
 
+
+} // namespace firmament

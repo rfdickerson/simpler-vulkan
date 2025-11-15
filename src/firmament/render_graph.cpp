@@ -1,5 +1,25 @@
 #include "render_graph.hpp"
 
+namespace firmament {
+
+namespace {
+    // Helper function to initialize a basic image barrier
+    VkImageMemoryBarrier2 createImageBarrier(VkImage image, VkImageLayout oldLayout,
+                                             VkImageLayout newLayout, VkImageAspectFlags aspectMask) {
+        VkImageMemoryBarrier2 barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        barrier.oldLayout = oldLayout;
+        barrier.newLayout = newLayout;
+        barrier.image = image;
+        barrier.subresourceRange.aspectMask = aspectMask;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        return barrier;
+    }
+}
+
 void RenderGraph::beginFrame(Device& inDevice, Swapchain& inSwapchain, VkCommandBuffer inCmd) {
     device = &inDevice;
     swapchain = &inSwapchain;
@@ -25,61 +45,45 @@ void RenderGraph::execute() {
 
         // Color or MSAA color target
         if (pass.attachments.colorImage != VK_NULL_HANDLE) {
-            auto& b = barriers[barrierCount++];
-            b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            // Choose a conservative src stage for layout-only transitions
-            b.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-            b.srcAccessMask = 0;
-            b.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-            b.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-            // Use known old layout if tracked; otherwise assume UNDEFINED (first use or after recreate)
-            VkImage oldImg = pass.attachments.colorImage;
             VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            auto it = imageLayouts.find(oldImg);
+            auto it = imageLayouts.find(pass.attachments.colorImage);
             if (it != imageLayouts.end()) {
                 oldLayout = it->second;
             }
-            b.oldLayout = oldLayout;
-            b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            // If transitioning from PRESENT, use BOTTOM_OF_PIPE as source stage
-            if (oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
-                b.srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-            }
-            b.image = pass.attachments.colorImage;
-            b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            b.subresourceRange.baseMipLevel = 0;
-            b.subresourceRange.levelCount = 1;
-            b.subresourceRange.baseArrayLayer = 0;
-            b.subresourceRange.layerCount = 1;
+
+            auto& b = barriers[barrierCount++];
+            b = createImageBarrier(pass.attachments.colorImage, oldLayout,
+                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                  VK_IMAGE_ASPECT_COLOR_BIT);
+            b.srcStageMask = (oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                ? VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT
+                : VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            b.srcAccessMask = 0;
+            b.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            b.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+
             imageLayouts[pass.attachments.colorImage] = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         }
 
         // Resolve target (swapchain) if provided
         if (pass.attachments.resolveImage != VK_NULL_HANDLE) {
-            auto& b = barriers[barrierCount++];
-            b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            b.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-            b.srcAccessMask = 0;
-            b.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-            b.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-            VkImage oldImg = pass.attachments.resolveImage;
             VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            auto it = imageLayouts.find(oldImg);
+            auto it = imageLayouts.find(pass.attachments.resolveImage);
             if (it != imageLayouts.end()) {
                 oldLayout = it->second;
             }
-            b.oldLayout = oldLayout;
-            b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            // If transitioning from PRESENT, use BOTTOM_OF_PIPE as source stage
-            if (oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
-                b.srcStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-            }
-            b.image = pass.attachments.resolveImage;
-            b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            b.subresourceRange.baseMipLevel = 0;
-            b.subresourceRange.levelCount = 1;
-            b.subresourceRange.baseArrayLayer = 0;
-            b.subresourceRange.layerCount = 1;
+
+            auto& b = barriers[barrierCount++];
+            b = createImageBarrier(pass.attachments.resolveImage, oldLayout,
+                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                  VK_IMAGE_ASPECT_COLOR_BIT);
+            b.srcStageMask = (oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+                ? VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT
+                : VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+            b.srcAccessMask = 0;
+            b.dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            b.dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+
             imageLayouts[pass.attachments.resolveImage] = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         }
 
@@ -137,52 +141,44 @@ void RenderGraph::execute() {
 
         // Depth resolve target (single-sample) if provided
         if (pass.attachments.depthResolveImage != VK_NULL_HANDLE) {
-            auto& b = barriers[barrierCount++];
-            b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-            VkImage oldImg = pass.attachments.depthResolveImage;
             VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            auto it = imageLayouts.find(oldImg);
+            auto it = imageLayouts.find(pass.attachments.depthResolveImage);
             if (it != imageLayouts.end()) {
                 oldLayout = it->second;
             }
-            // Destination is depth attachment write (resolve destination)
+
+            auto& b = barriers[barrierCount++];
+            b = createImageBarrier(pass.attachments.depthResolveImage, oldLayout,
+                                  VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                                  VK_IMAGE_ASPECT_DEPTH_BIT);
             b.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
             b.srcAccessMask = 0;
             b.dstStageMask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
             b.dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-            b.oldLayout = oldLayout;
-            b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            b.image = pass.attachments.depthResolveImage;
-            b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-            b.subresourceRange.baseMipLevel = 0;
-            b.subresourceRange.levelCount = 1;
-            b.subresourceRange.baseArrayLayer = 0;
-            b.subresourceRange.layerCount = 1;
+
             imageLayouts[pass.attachments.depthResolveImage] = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         }
 
         // Any sampled images requested by this pass
         for (VkImage sampled : pass.sampledImages) {
-            auto& b = barriers[barrierCount++];
-            b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
             VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             auto it = imageLayouts.find(sampled);
             if (it != imageLayouts.end()) {
                 oldLayout = it->second;
             }
-            // Transition from whatever (likely COLOR_ATTACHMENT_OPTIMAL) to SHADER_READ_ONLY
-            b.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-            b.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+            auto& b = barriers[barrierCount++];
+            b = createImageBarrier(sampled, oldLayout,
+                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                  VK_IMAGE_ASPECT_COLOR_BIT);
+            b.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT |
+                            VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                            VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            b.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT |
+                             VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             b.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
             b.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT;
-            b.oldLayout = oldLayout;
-            b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            b.image = sampled;
-            b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // assume color; if depth, caller should use depthReadOnly
-            b.subresourceRange.baseMipLevel = 0;
-            b.subresourceRange.levelCount = 1;
-            b.subresourceRange.baseArrayLayer = 0;
-            b.subresourceRange.layerCount = 1;
+
             imageLayouts[sampled] = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         }
 
@@ -258,24 +254,14 @@ void RenderGraph::endFrame() {
     if (!swapchain || swapchain->images.empty()) return;
 
     VkImage presentImage = swapchain->images[swapchain->currentImageIndex].image;
-    // The image should be in COLOR_ATTACHMENT_OPTIMAL after rendering
-    // (we set it in execute() after the barrier)
     VkImageLayout currentLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-    VkImageMemoryBarrier2 presentBarrier{};
-    presentBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    VkImageMemoryBarrier2 presentBarrier = createImageBarrier(
+        presentImage, currentLayout, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_ASPECT_COLOR_BIT);
     presentBarrier.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     presentBarrier.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
     presentBarrier.dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
     presentBarrier.dstAccessMask = 0;
-    presentBarrier.oldLayout = currentLayout;
-    presentBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    presentBarrier.image = presentImage;
-    presentBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    presentBarrier.subresourceRange.baseMipLevel = 0;
-    presentBarrier.subresourceRange.levelCount = 1;
-    presentBarrier.subresourceRange.baseArrayLayer = 0;
-    presentBarrier.subresourceRange.layerCount = 1;
 
     VkDependencyInfo dep{};
     dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
@@ -289,3 +275,5 @@ void RenderGraph::endFrame() {
 }
 
 
+
+} // namespace firmament

@@ -2,8 +2,10 @@
 
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
-#include "device.hpp"
-#include "swapchain.hpp"
+#include "firmament/device.hpp"
+#include "firmament/swapchain.hpp"
+
+using namespace firmament;
 
 // Push constants for terrain rendering
 struct TerrainPushConstants {

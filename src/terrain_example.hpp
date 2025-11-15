@@ -1,15 +1,33 @@
 #pragma once
 
-#include "device.hpp"
-#include "swapchain.hpp"
+#include "firmament/device.hpp"
+#include "firmament/swapchain.hpp"
 #include "terrain_renderer.hpp"
 #include "terrain_pipeline.hpp"
 #include "tree_renderer.hpp"
 #include "tree_pipeline.hpp"
-#include "camera.hpp"
+#include "firmament/camera.hpp"
 #include "map_builder.hpp"
 #include "ssao_pipeline.hpp"
 #include "tiltshift_pipeline.hpp"
+
+using namespace firmament;
+
+// SSAO effect constants
+namespace SSAOConstants {
+    constexpr float RADIUS = 4.0f;
+    constexpr float BIAS = 0.010f;
+    constexpr float INTENSITY = 3.0f;
+}
+
+// Tilt-shift effect constants
+namespace TiltShiftConstants {
+    constexpr float ANGLE_DEG = 0.0f;           // Horizontal band (5-15 for diagonal tilt)
+    constexpr float FOCUS_CENTER = 0.5f;        // Center of screen in focus (0.4-0.6 recommended)
+    constexpr float BAND_HALF_WIDTH = 0.18f;    // Sharp band width (0.15-0.25 for subtle)
+    constexpr float BLUR_SCALE = 0.10f;         // Blur falloff rate (0.08-0.15)
+    constexpr float MAX_BLUR_RADIUS = 18.0f;    // Max blur radius in pixels (12-25)
+}
 
 // Example terrain scene setup
 class TerrainExample {
@@ -213,9 +231,9 @@ public:
 
         // Push constants
         SSAOPushConstants pc{};
-        pc.radius = 4.0f;      // stronger radius for visibility
-        pc.bias = 0.010f;      // slightly lower bias
-        pc.intensity = 3.0f;   // stronger contrast
+        pc.radius = SSAOConstants::RADIUS;
+        pc.bias = SSAOConstants::BIAS;
+        pc.intensity = SSAOConstants::INTENSITY;
         glm::mat4 invProj = glm::inverse(camera.getProjectionMatrix());
         memcpy(pc.invProj, &invProj, sizeof(float) * 16);
         vkCmdPushConstants(cmd, ssaoPipeline.pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(SSAOPushConstants), &pc);
@@ -248,15 +266,15 @@ public:
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, tiltPipeline.pipelineLayout, 0, 1, &tiltPipeline.descriptorSet, 0, nullptr);
 
         // Miniature/diorama look parameters (tilt-shift effect)
-        float angleDeg = 0.0f; // horizontal band (try 5-15 for diagonal tilt)
-        float angleRad = angleDeg * 0.017453292519943295f;
+        constexpr float DEG_TO_RAD = 0.017453292519943295f;
+        float angleRad = TiltShiftConstants::ANGLE_DEG * DEG_TO_RAD;
         TiltShiftPushConstants pc{};
         pc.cosAngle = cosf(angleRad);
         pc.sinAngle = sinf(angleRad);
-        pc.focusCenter = 0.5f;       // center of screen in focus (0.4-0.6 recommended)
-        pc.bandHalfWidth = 0.18f;    // sharp band width (0.15-0.25 for subtle)
-        pc.blurScale = 0.10f;        // blur falloff rate (0.08-0.15)
-        pc.maxRadiusPixels = 18.0f;  // max blur radius (12-25 pixels)
+        pc.focusCenter = TiltShiftConstants::FOCUS_CENTER;
+        pc.bandHalfWidth = TiltShiftConstants::BAND_HALF_WIDTH;
+        pc.blurScale = TiltShiftConstants::BLUR_SCALE;
+        pc.maxRadiusPixels = TiltShiftConstants::MAX_BLUR_RADIUS;
         pc.resolution[0] = static_cast<float>(swapchain.extent.width);
         pc.resolution[1] = static_cast<float>(swapchain.extent.height);
         pc.padding = 0.0f;

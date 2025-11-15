@@ -8,219 +8,39 @@
 #include <chrono>
 #include <thread>
 
-#include "device.hpp"
-#include "buffer.hpp"
-#include "window.hpp"
-#include "text.hpp"
-#include "glyph_atlas.hpp"
-#include "swapchain.hpp"
-#include "text_pipeline.hpp"
+#include "firmament/device.hpp"
+#include "firmament/buffer.hpp"
+#include "firmament/window.hpp"
+#include "firmament/text.hpp"
+#include "firmament/glyph_atlas.hpp"
+#include "firmament/swapchain.hpp"
+#include "firmament/text_pipeline.hpp"
 #include "terrain_example.hpp"
 #include <glm/glm.hpp>
-#include "render_graph.hpp"
-#include "hex_coord.hpp"
+#include "firmament/render_graph.hpp"
+#include "firmament/hex_coord.hpp"
 
-// Colored vertex structure for the triangle
-struct ColoredVertex {
-    float pos[2];    // Position in NDC
-    float color[3];  // RGB color
-};
+using namespace firmament;
 
-// Simple pipeline structure for the triangle
-struct TrianglePipeline {
-    VkPipelineLayout pipelineLayout;
-    VkPipeline pipeline;
-};
-
-// Create triangle rendering pipeline
-void createTrianglePipeline(Device& device, Swapchain& swapchain, TrianglePipeline& pipeline) {
-    // Load shaders
-    VkShaderModule vertShaderModule = loadShaderModule(device, "../shaders/triangle.vert.spv");
-    VkShaderModule fragShaderModule = loadShaderModule(device, "../shaders/triangle.frag.spv");
-
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName = "main";
-
-    VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
-
-    // Vertex input
-    VkVertexInputBindingDescription bindingDescription{};
-    bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(ColoredVertex);
-    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-    std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
-    attributeDescriptions[0].binding = 0;
-    attributeDescriptions[0].location = 0;
-    attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-    attributeDescriptions[0].offset = offsetof(ColoredVertex, pos);
-
-    attributeDescriptions[1].binding = 0;
-    attributeDescriptions[1].location = 1;
-    attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescriptions[1].offset = offsetof(ColoredVertex, color);
-
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-    // Input assembly
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-    inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-    // Viewport and scissor (dynamic)
-    VkPipelineViewportStateCreateInfo viewportState{};
-    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.scissorCount = 1;
-
-    // Rasterization
-    VkPipelineRasterizationStateCreateInfo rasterizer{};
-    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizer.depthClampEnable = VK_FALSE;
-    rasterizer.rasterizerDiscardEnable = VK_FALSE;
-    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_NONE;
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rasterizer.depthBiasEnable = VK_FALSE;
-
-    // Multisampling
-    VkPipelineMultisampleStateCreateInfo multisampling{};
-    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-    // Blending (no blending for solid triangle)
-    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable = VK_FALSE;
-
-    VkPipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.logicOpEnable = VK_FALSE;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
-
-    // Dynamic states
-    std::vector<VkDynamicState> dynamicStates = {
-        VK_DYNAMIC_STATE_VIEWPORT,
-        VK_DYNAMIC_STATE_SCISSOR
-    };
-
-    VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
-
-    // Pipeline layout (no descriptors or push constants needed)
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 0;
-    pipelineLayoutInfo.pushConstantRangeCount = 0;
-
-    if (vkCreatePipelineLayout(device.device, &pipelineLayoutInfo, nullptr, &pipeline.pipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create triangle pipeline layout!");
-    }
-
-    // Dynamic rendering info
-    VkFormat colorFormat = swapchain.format;
-    VkPipelineRenderingCreateInfo renderingInfo{};
-    renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-    renderingInfo.colorAttachmentCount = 1;
-    renderingInfo.pColorAttachmentFormats = &colorFormat;
-
-    // Create graphics pipeline
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.pNext = &renderingInfo;
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = pipeline.pipelineLayout;
-    pipelineInfo.renderPass = VK_NULL_HANDLE;
-    pipelineInfo.subpass = 0;
-
-    if (vkCreateGraphicsPipelines(device.device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline.pipeline) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create triangle graphics pipeline!");
-    }
-
-    // Cleanup shader modules
-    vkDestroyShaderModule(device.device, vertShaderModule, nullptr);
-    vkDestroyShaderModule(device.device, fragShaderModule, nullptr);
-
-    std::cout << "Triangle pipeline created successfully." << std::endl;
+// Camera control constants
+namespace CameraConstants {
+    constexpr float PAN_SENSITIVITY = 0.0025f;
+    constexpr float ROTATE_SENSITIVITY_DEG = 5.0f;
+    constexpr float ZOOM_SENSITIVITY = 1.0f;
+    constexpr float WASD_BASE_SPEED = 5.0f;
+    constexpr float WASD_SPEED_SCALE = 0.1f;
 }
 
-void destroyTrianglePipeline(Device& device, TrianglePipeline& pipeline) {
-    if (pipeline.pipeline != VK_NULL_HANDLE) {
-        vkDestroyPipeline(device.device, pipeline.pipeline, nullptr);
-        pipeline.pipeline = VK_NULL_HANDLE;
-    }
-    if (pipeline.pipelineLayout != VK_NULL_HANDLE) {
-        vkDestroyPipelineLayout(device.device, pipeline.pipelineLayout, nullptr);
-        pipeline.pipelineLayout = VK_NULL_HANDLE;
-    }
-}
-
-// Helper function to build text vertex buffer from shaped glyphs
-std::vector<TextVertex> buildTextVertices(const std::vector<ShapedGlyph>& shapedGlyphs,
-                                         const GlyphAtlas& atlas,
-                                         float startX, float startY) {
-    std::vector<TextVertex> vertices;
-    float cursorX = startX;
-    float cursorY = startY;
-    
-    for (const auto& sg : shapedGlyphs) {
-        const GlyphInfo* info = atlas.getGlyphInfo(sg.glyph_index);
-        if (!info || info->width == 0 || info->height == 0) {
-            cursorX += sg.x_advance;
-            cursorY += sg.y_advance;
-            continue;
-        }
-        
-        float x = cursorX + sg.x_offset + info->bearingX;
-        float y = cursorY + sg.y_offset - info->bearingY;
-        float w = info->width;
-        float h = info->height;
-        
-        // Two triangles per glyph (6 vertices)
-        // Triangle 1: top-left, bottom-left, top-right
-        vertices.push_back({{x, y}, {info->uvX, info->uvY}});
-        vertices.push_back({{x, y + h}, {info->uvX, info->uvY + info->uvH}});
-        vertices.push_back({{x + w, y}, {info->uvX + info->uvW, info->uvY}});
-        
-        // Triangle 2: top-right, bottom-left, bottom-right
-        vertices.push_back({{x + w, y}, {info->uvX + info->uvW, info->uvY}});
-        vertices.push_back({{x, y + h}, {info->uvX, info->uvY + info->uvH}});
-        vertices.push_back({{x + w, y + h}, {info->uvX + info->uvW, info->uvY + info->uvH}});
-        
-        cursorX += sg.x_advance;
-        cursorY += sg.y_advance;
-    }
-    
-    return vertices;
+// Helper function to handle swapchain recreation and related updates
+void handleSwapchainRecreation(Device& device, VkSurfaceKHR surface, Window& window,
+                               Swapchain& swapchain, RenderGraph& graph,
+                               TerrainExample& terrainExample) {
+    recreateSwapchain(device, surface, window, swapchain);
+    graph.resetLayoutTracking();
+    terrainExample.getCamera().setAspectRatio(
+        static_cast<float>(swapchain.extent.width) /
+        static_cast<float>(swapchain.extent.height));
+    terrainExample.rebindSsaoDescriptors();
 }
 
 int main() {
@@ -295,7 +115,7 @@ int main() {
 					glm::vec2 forwardXZ = glm::normalize(glm::vec2(viewDir.x, viewDir.z));
 					glm::vec2 rightXZ = glm::vec2(forwardXZ.y, -forwardXZ.x);
 
-					float sensitivity = 0.0025f * cam.orbitRadius;
+					float sensitivity = CameraConstants::PAN_SENSITIVITY * cam.orbitRadius;
 					float dxWorld = (-panDX) * sensitivity * rightXZ.x + (-panDY) * sensitivity * forwardXZ.x;
 					float dzWorld = (-panDX) * sensitivity * rightXZ.y + (-panDY) * sensitivity * forwardXZ.y;
 					cam.pan(dxWorld, dzWorld);
@@ -309,11 +129,9 @@ int main() {
                     Camera& cam = terrainExample->getCamera();
                     bool altDown = window.isKeyDown(GLFW_KEY_LEFT_ALT) || window.isKeyDown(GLFW_KEY_RIGHT_ALT);
                     if (altDown) {
-                        float rotateSensitivityDeg = 5.0f;
-                        cam.rotate(-scrollY * rotateSensitivityDeg);
+                        cam.rotate(-scrollY * CameraConstants::ROTATE_SENSITIVITY_DEG);
                     } else {
-                        float zoomSensitivity = 1.0f;
-                        cam.zoom(-scrollY * zoomSensitivity);
+                        cam.zoom(-scrollY * CameraConstants::ZOOM_SENSITIVITY);
                     }
                 }
             }
@@ -334,8 +152,8 @@ int main() {
                     glm::vec2 forwardXZ = glm::normalize(glm::vec2(viewDir.x, viewDir.z));
                     glm::vec2 rightXZ = glm::vec2(forwardXZ.y, -forwardXZ.x);
 
-                    float baseSpeed = 5.0f;
-                    float speed = baseSpeed * deltaTime * glm::max(cam.orbitRadius * 0.1f, 1.0f);
+                    float speed = CameraConstants::WASD_BASE_SPEED * deltaTime *
+                                 glm::max(cam.orbitRadius * CameraConstants::WASD_SPEED_SCALE, 1.0f);
 
                     float dxWorld = (strafeAxis * rightXZ.x + forwardAxis * forwardXZ.x) * speed;
                     float dzWorld = (strafeAxis * rightXZ.y + forwardAxis * forwardXZ.y) * speed;
@@ -376,13 +194,7 @@ int main() {
 
             // Handle window resize
             if (framebufferResized) {
-                recreateSwapchain(device, surface, window, swapchain);
-                graph.resetLayoutTracking(); // Clear layout tracking for new swapchain images
-                terrainExample->getCamera().setAspectRatio(
-                    static_cast<float>(swapchain.extent.width) / 
-                    static_cast<float>(swapchain.extent.height));
-                // Rebind dynamic image descriptors
-                terrainExample->rebindSsaoDescriptors();
+                handleSwapchainRecreation(device, surface, window, swapchain, graph, *terrainExample);
                 framebufferResized = false;
             }
 
@@ -391,13 +203,7 @@ int main() {
 
             // Acquire next image
             if (!acquireNextImage(device, swapchain)) {
-                recreateSwapchain(device, surface, window, swapchain);
-                graph.resetLayoutTracking(); // Clear layout tracking for new swapchain images
-                terrainExample->getCamera().setAspectRatio(
-                    static_cast<float>(swapchain.extent.width) / 
-                    static_cast<float>(swapchain.extent.height));
-                // Rebind dynamic image descriptors
-                terrainExample->rebindSsaoDescriptors();
+                handleSwapchainRecreation(device, surface, window, swapchain, graph, *terrainExample);
                 continue;
             }
 

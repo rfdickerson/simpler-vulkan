@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <vector>
 
+namespace firmament {
+
 struct Device;
 struct Buffer;
 
@@ -67,3 +69,5 @@ private:
 // Create a sampler for the glyph atlas
 VkSampler createAtlasSampler(Device& device);
 
+
+} // namespace firmament

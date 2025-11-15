@@ -1,6 +1,8 @@
 #include "terrain_pipeline.hpp"
-#include "text_pipeline.hpp"
-#include "hex_mesh.hpp"
+#include "firmament/text_pipeline.hpp"
+#include "firmament/hex_mesh.hpp"
+
+using namespace firmament;
 
 #include <iostream>
 #include <fstream>
