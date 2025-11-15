@@ -4,6 +4,8 @@
 #include <vector>
 #include "image.hpp"
 
+namespace firmament {
+
 struct Device;
 struct Window;
 
@@ -71,3 +73,5 @@ bool acquireNextImage(Device& device, Swapchain& swapchain);
 // Present image
 bool presentImage(Device& device, VkSurfaceKHR surface, Swapchain& swapchain);
 
+
+} // namespace firmament

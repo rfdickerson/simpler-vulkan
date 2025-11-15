@@ -1,15 +1,17 @@
 #pragma once
 
-#include "device.hpp"
-#include "swapchain.hpp"
+#include "firmament/device.hpp"
+#include "firmament/swapchain.hpp"
 #include "terrain_renderer.hpp"
 #include "terrain_pipeline.hpp"
 #include "tree_renderer.hpp"
 #include "tree_pipeline.hpp"
-#include "camera.hpp"
+#include "firmament/camera.hpp"
 #include "map_builder.hpp"
 #include "ssao_pipeline.hpp"
 #include "tiltshift_pipeline.hpp"
+
+using namespace firmament;
 
 // SSAO effect constants
 namespace SSAOConstants {

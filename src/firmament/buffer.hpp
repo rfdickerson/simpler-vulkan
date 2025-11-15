@@ -3,6 +3,8 @@
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
+namespace firmament {
+
 struct Device;
 
 struct Buffer {
@@ -13,3 +15,5 @@ struct Buffer {
 Buffer CreateSsboBuffer(Device& device, VkDeviceSize size);
 Buffer CreateVertexBuffer(Device& device, VkDeviceSize size);
 void   destroyBuffer(Device& device, Buffer& buffer);
+
+} // namespace firmament

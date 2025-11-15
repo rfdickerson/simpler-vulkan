@@ -1,5 +1,7 @@
 #include "tree_renderer.hpp"
-#include "hex_coord.hpp"
+#include "firmament/hex_coord.hpp"
+
+using namespace firmament;
 #include <iostream>
 #include <cstring>
 

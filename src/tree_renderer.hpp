@@ -2,9 +2,11 @@
 
 #include <vector>
 #include <random>
-#include "device.hpp"
-#include "buffer.hpp"
-#include "camera.hpp"
+#include "firmament/device.hpp"
+#include "firmament/buffer.hpp"
+#include "firmament/camera.hpp"
+
+using namespace firmament;
 #include "terrain_renderer.hpp"
 
 // Instance data for each tree

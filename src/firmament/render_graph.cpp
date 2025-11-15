@@ -1,5 +1,7 @@
 #include "render_graph.hpp"
 
+namespace firmament {
+
 namespace {
     // Helper function to initialize a basic image barrier
     VkImageMemoryBarrier2 createImageBarrier(VkImage image, VkImageLayout oldLayout,
@@ -273,3 +275,5 @@ void RenderGraph::endFrame() {
 }
 
 
+
+} // namespace firmament

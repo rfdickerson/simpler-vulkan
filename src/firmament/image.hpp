@@ -3,6 +3,8 @@
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 
+namespace firmament {
+
 struct Device;
 struct Buffer;
 
@@ -41,3 +43,5 @@ void copyBufferToImage(VkCommandBuffer cmd, VkBuffer buffer, VkImage image,
 Buffer uploadImageData(Device& device, VkCommandBuffer cmd, Image& image, 
                        const void* data, size_t dataSize);
 
+
+} // namespace firmament

@@ -7,6 +7,8 @@
 #include "device.hpp"
 #include "swapchain.hpp"
 
+namespace firmament {
+
 struct RenderAttachment {
     VkImageView colorView{VK_NULL_HANDLE};
     VkImageView resolveView{VK_NULL_HANDLE};
@@ -60,3 +62,5 @@ private:
 };
 
 
+
+} // namespace firmament

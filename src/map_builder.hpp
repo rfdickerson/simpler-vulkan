@@ -3,7 +3,9 @@
 #include <vector>
 #include <cstdint>
 #include "terrain_renderer.hpp"
-#include "hex_coord.hpp"
+#include "firmament/hex_coord.hpp"
+
+using namespace firmament;
 #include "terrain.hpp"
 
 // Configuration for map generation

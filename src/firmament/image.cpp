@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <iostream>
 
+namespace firmament {
+
 Image createImage(Device& device, uint32_t width, uint32_t height, VkFormat format,
                   VkImageUsageFlags usage, VmaMemoryUsage memoryUsage, uint32_t mipLevels, VkSampleCountFlagBits samples) {
     Image img{};
@@ -162,3 +164,5 @@ Buffer uploadImageData(Device& device, VkCommandBuffer cmd, Image& image,
     return stagingBuffer;
 }
 
+
+} // namespace firmament

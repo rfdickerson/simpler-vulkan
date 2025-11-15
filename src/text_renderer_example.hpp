@@ -5,9 +5,11 @@
 // This file demonstrates how to use the image.hpp and glyph_atlas.hpp
 // files to create a texture atlas for rendering text.
 
-#include "device.hpp"
-#include "glyph_atlas.hpp"
-#include "text.hpp"
+#include "firmament/device.hpp"
+#include "firmament/glyph_atlas.hpp"
+#include "firmament/text.hpp"
+
+using namespace firmament;
 #include <string>
 
 /*

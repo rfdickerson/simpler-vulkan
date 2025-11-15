@@ -8,17 +8,19 @@
 #include <chrono>
 #include <thread>
 
-#include "device.hpp"
-#include "buffer.hpp"
-#include "window.hpp"
-#include "text.hpp"
-#include "glyph_atlas.hpp"
-#include "swapchain.hpp"
-#include "text_pipeline.hpp"
+#include "firmament/device.hpp"
+#include "firmament/buffer.hpp"
+#include "firmament/window.hpp"
+#include "firmament/text.hpp"
+#include "firmament/glyph_atlas.hpp"
+#include "firmament/swapchain.hpp"
+#include "firmament/text_pipeline.hpp"
 #include "terrain_example.hpp"
 #include <glm/glm.hpp>
-#include "render_graph.hpp"
-#include "hex_coord.hpp"
+#include "firmament/render_graph.hpp"
+#include "firmament/hex_coord.hpp"
+
+using namespace firmament;
 
 // Camera control constants
 namespace CameraConstants {

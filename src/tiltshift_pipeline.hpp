@@ -1,8 +1,10 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-#include "device.hpp"
-#include "swapchain.hpp"
+#include "firmament/device.hpp"
+#include "firmament/swapchain.hpp"
+
+using namespace firmament;
 
 struct TiltShiftPushConstants {
     float cosAngle;
