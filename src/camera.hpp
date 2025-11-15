@@ -67,35 +67,39 @@ public:
     }
     
     // Move the camera target (panning)
-    void pan(float dx, float dz) {
+    void pan(const float dx, const float dz) {
         target.x += dx;
         target.z += dz;
         updatePosition();
     }
-    
+
     // Zoom in/out (adjust orbit radius)
-    void zoom(float delta) {
-        orbitRadius = glm::clamp(orbitRadius + delta, 5.0f, 100.0f);
+    void zoom(const float delta) {
+        constexpr float MIN_ORBIT_RADIUS = 5.0f;
+        constexpr float MAX_ORBIT_RADIUS = 100.0f;
+        orbitRadius = glm::clamp(orbitRadius + delta, MIN_ORBIT_RADIUS, MAX_ORBIT_RADIUS);
         updatePosition();
     }
-    
+
     // Rotate around target
-    void rotate(float angleDelta) {
+    void rotate(const float angleDelta) {
         orbitAngle += angleDelta;
         // Normalize to [0, 360)
         while (orbitAngle >= 360.0f) orbitAngle -= 360.0f;
         while (orbitAngle < 0.0f) orbitAngle += 360.0f;
         updatePosition();
     }
-    
+
     // Adjust tilt angle (look more/less down)
-    void tilt(float angleDelta) {
-        tiltAngle = glm::clamp(tiltAngle + angleDelta, 30.0f, 89.0f);
+    void tilt(const float angleDelta) {
+        constexpr float MIN_TILT_ANGLE = 30.0f;
+        constexpr float MAX_TILT_ANGLE = 89.0f;
+        tiltAngle = glm::clamp(tiltAngle + angleDelta, MIN_TILT_ANGLE, MAX_TILT_ANGLE);
         updatePosition();
     }
-    
+
     // Set aspect ratio (call when window resizes)
-    void setAspectRatio(float aspect) {
+    void setAspectRatio(const float aspect) {
         aspectRatio = aspect;
     }
 
@@ -107,7 +111,7 @@ public:
         orbitAngle = 45.0f;
         updatePosition();
     }
-    
+
     // Focus on a specific world position
     void focusOn(const glm::vec3& worldPos) {
         target = worldPos;
@@ -118,7 +122,9 @@ public:
     // screenX, screenY: pixel coordinates (0 to width, 0 to height)
     // screenWidth, screenHeight: window dimensions
     // planeY: Y coordinate of the plane to intersect (typically 0 for ground)
-    glm::vec3 unprojectToPlane(float screenX, float screenY, float screenWidth, float screenHeight, float planeY = 0.0f) const {
+    glm::vec3 unprojectToPlane(const float screenX, const float screenY,
+                              const float screenWidth, const float screenHeight,
+                              const float planeY = 0.0f) const {
         // Convert screen coordinates to normalized device coordinates (NDC)
         // NDC: x in [-1, 1], y in [-1, 1], with origin at center
         // Screen: x in [0, width], y in [0, height], with origin at top-left
